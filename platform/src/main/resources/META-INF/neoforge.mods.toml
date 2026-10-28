@@ -1,0 +1,43 @@
+modLoader = "javafml"
+loaderVersion = "${loader_version_range}"
+# One license field per file: the mod's. The bundled API classes are MIT (LICENSE-API in the jar).
+license = "${mod_license}"
+
+[[mods]]
+modId = "${mod_id}"
+version = "${mod_version}"
+displayName = "${mod_name}"
+authors = "T_Lia"
+description = '''
+Turns image, GIF, video and audio links shared in chat into media you can watch and listen to in game.
+'''
+
+# The public API, as its own mod id so addons can depend on a version range of it.
+[[mods]]
+modId = "liasmediaplayerapi"
+version = "${api_version}"
+displayName = "Lia's Media Player API"
+description = '''
+Public API of Lia's Media Player, under the ${api_license} license.
+'''
+
+[[dependencies.${mod_id}]]
+modId = "neoforge"
+type = "required"
+versionRange = "[${neo_version},)"
+ordering = "NONE"
+side = "CLIENT"
+
+[[dependencies.${mod_id}]]
+modId = "minecraft"
+type = "required"
+versionRange = "${minecraft_version_range}"
+ordering = "NONE"
+side = "CLIENT"
+
+[[dependencies.liasmediaplayerapi]]
+modId = "minecraft"
+type = "required"
+versionRange = "${minecraft_version_range}"
+ordering = "NONE"
+side = "CLIENT"

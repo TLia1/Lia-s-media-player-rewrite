@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "${mod_id}",
+  "version": "${mod_version}",
+  "name": "${mod_name}",
+  "description": "Turns image, GIF, video and audio links shared in chat into media you can watch and listen to in game.",
+  "authors": [
+    "T_Lia"
+  ],
+  "license": "${mod_license}",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "com.lia.mediaplayer.platform.fabric.FabricEntrypoint"
+    ]
+  },
+  "provides": [
+    "liasmediaplayerapi"
+  ],
+  "depends": {
+    "fabricloader": ">=${fabric_loader_version}",
+    "fabric-api": "*",
+    "minecraft": "${minecraft_version_range_fabric}",
+    "java": ">=${java_version}"
+  }
+}

@@ -1,0 +1,112 @@
+name: Build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  # The plain Java modules: compiled once, held to the strict checks (Error Prone,
+  # NullAway, -Werror, formatting, coverage, layering) and the version-guard check.
+  modules:
+    name: Modules (api, core, ui)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: |
+            21
+            25
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Verify modules
+        run: ./gradlew verifyModules
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: module-reports
+          path: |
+            */build/reports/
+          if-no-files-found: ignore
+
+  # The matrix lives in settings.gradle.kts and nowhere else; this parses it so a target
+  # added there cannot be silently left out of CI. It also checks that platform/src is
+  # committed on the VCS target, since a switched tree rewrites every guard.
+  targets:
+    name: Collect targets
+    runs-on: ubuntu-latest
+    outputs:
+      targets: ${{ steps.parse.outputs.targets }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Parse the Stonecutter matrix
+        id: parse
+        run: |
+          expanded=$(grep -oE '^[[:space:]]*match\("[^"]+"(,[[:space:]]*"[^"]+")+\)' settings.gradle.kts \
+            | sed -e 's/.*match(//' -e 's/)$//' -e 's/"//g' -e 's/,[[:space:]]*/,/g' \
+            | awk -F, 'NF > 1 { for (i = 2; i <= NF; i++) print $1 "-" $i }')
+          count=$(printf '%s\n' "$expanded" | grep -c . || true)
+          expected=$(grep -E '^[[:space:]]*match\(' settings.gradle.kts | grep -oE '"(neoforge|fabric)"' | wc -l)
+          if [ "$count" -eq 0 ] || [ "$count" -ne "$expected" ]; then
+            echo "::error::Parsed $count targets from settings.gradle.kts, expected $expected"
+            exit 1
+          fi
+          targets=$(printf '%s\n' "$expanded" | grep . | jq -R . | jq -sc .)
+          echo "targets=$targets" >> "$GITHUB_OUTPUT"
+          echo "Targets: $targets"
+
+      - name: Check platform/src is on the VCS target
+        run: |
+          active=$(grep -oE 'stonecutter active "[^"]+"' platform/stonecutter.gradle.kts | sed -e 's/.*"\(.*\)"/\1/')
+          expected=$(grep -oE 'vcsVersion = "[^"]+"' settings.gradle.kts | sed -e 's/.*"\(.*\)"/\1/')
+          if [ -z "$active" ] || [ "$active" != "$expected" ]; then
+            echo "::error::platform/src is switched to '$active'; expected '$expected'. Run ./gradlew \"Reset active project\"."
+            exit 1
+          fi
+
+  platform:
+    name: Build ${{ matrix.target }}
+    needs: [ targets ]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.targets.outputs.targets) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # 21 last so it is JAVA_HOME; the per-target toolchain is found through the env vars below.
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: |
+            25
+            21
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Test ${{ matrix.target }}
+        run: ./gradlew ":platform:${{ matrix.target }}:test" -Porg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64,JAVA_HOME_25_X64
+
+      - name: Build ${{ matrix.target }}
+        run: ./gradlew ":platform:${{ matrix.target }}:build" -Porg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64,JAVA_HOME_25_X64
+
+      - name: Upload jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: platform/versions/${{ matrix.target }}/build/libs/*.jar
+          if-no-files-found: error

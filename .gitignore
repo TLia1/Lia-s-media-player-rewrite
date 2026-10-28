@@ -1,0 +1,42 @@
+### Gradle ###
+.gradle/
+build/
+.kotlin/
+platform/versions/*/build/
+.stonecutter/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/**/build/
+
+### IntelliJ IDEA ###
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+!**/src/**/out/
+.run/
+
+### Eclipse ###
+.apt_generated
+.classpath
+.eclipse/
+.factorypath
+.project
+.settings
+bin/
+!**/src/**/bin/
+
+### VS Code ###
+.vscode/
+
+### Mac OS ###
+.DS_Store
+
+### Minecraft Modding ###
+run/
+platform/versions/*/run/
+!**/src/**/run/
+repo/
+
+### Runtime logs ###
+logs/

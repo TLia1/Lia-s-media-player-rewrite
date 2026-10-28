@@ -1,0 +1,38 @@
+# Properties of the platform subprojects, loaded by Stonecutter.
+#
+# Top-level keys are shared by every target. A table named after a Minecraft version
+# (["1.21.1"]) is visible only to that version's subprojects, with the prefix stripped:
+# `["1.21.1"] deps.neoforge` is read as `deps.neoforge`.
+#
+# Both loaders read the same per-version table and each picks the keys it needs. The
+# loader is encoded in the key name (deps.neoforge, deps.fabric_api), not in the table
+# name, because Stonecutter strips tag segments from property paths.
+
+mod.id = "liasmediaplayer"
+mod.name = "Lia's Media Player"
+mod.group = "com.lia.mediaplayer"
+mod.version = "3.0.0-alpha.1"
+# Must match ApiVersion.CURRENT: addons pin their dependency range against it.
+mod.api_version = "4.0.0"
+# SPDX identifiers. The mod is GPL-3.0; the API (api/, also bundled in the mod jar) is MIT
+# so that addons of any license can build against it.
+mod.license = "GPL-3.0-only"
+mod.api_license = "MIT"
+mod.loader_version_range = "[1,)"
+
+deps.fabric_loader = "0.19.3"
+
+# `deps.java` is the Java release Mojang ships for that Minecraft version.
+# `deps.parchment` is "<minecraft>:<mappings>", empty where Parchment publishes nothing.
+# `deps.minecraft_range` is a Maven range for neoforge.mods.toml;
+# `deps.minecraft_range_fabric` is the same bound in Fabric's syntax.
+
+["1.21.1"]
+deps.minecraft = "1.21.1"
+deps.minecraft_range = "[1.21.1]"
+deps.minecraft_range_fabric = "1.21.1"
+deps.java = 21
+deps.neoforge = "21.1.230"
+deps.parchment = "1.21.1:2024.11.17"
+deps.fabric_api = "0.116.15+1.21.1"
+deps.modmenu = "11.0.4"
