@@ -1,9 +1,11 @@
 # Lia's Media Player — v3
 
 A rewrite of Lia's Media Player. The design, the reasons behind it and the milestones are
-in [REWRITE-DESIGN.md](REWRITE-DESIGN.md). This repository is at **milestone M0**: the
-project skeleton. The mod loads on Fabric and NeoForge for Minecraft 1.21.1 and does
-nothing visible yet.
+in [REWRITE-DESIGN.md](REWRITE-DESIGN.md). This repository is at **milestone M1**: the
+headless engine in `core` — tool management, link recognition, resolution through
+`yt-dlp -J`, ffmpeg sessions, the player and its queue — plays YouTube links and direct
+files from a terminal. The mod loads on Fabric and NeoForge for Minecraft 1.21.1 and
+installs its tools at startup, but shows nothing yet; windows come with M2.
 
 ## Layout
 
@@ -36,11 +38,26 @@ Rules the build enforces:
 Runs the tests, coverage, formatting check, layering tests and guard check of the plain
 modules. Needs no Minecraft and takes seconds.
 
+The engine's integration tests (tagged `integration`) run real ffmpeg on media they
+generate, served by a local HTTP server; they need `ffmpeg` and `ffprobe` on `PATH` (or
+`FFMPEG_PATH`/`FFPROBE_PATH`) and skip themselves otherwise. No test touches the network.
+
 ```bash
 ./gradlew spotlessApply
 ```
 
 Formats the plain modules.
+
+```bash
+./gradlew :core:playUrl --args="--script 'wait 10; p; wait 3; p; s 120; wait 8; q' https://www.youtube.com/watch?v=aqz-KE-bpKQ"
+```
+
+The CLI harness: plays a link through the real engine, sound to the real sound card,
+and prints the player's state every second. Leave out `--script` to type commands
+(`p` pause/resume, `s <seconds>` seek, `f`/`b` ±10 s, `v <0..1>` volume, `n` next,
+`shot [file.png]` save the current frame, `q` quit); add `--audio` for sound only or
+`--height 1080`. Tools are found on the machine or downloaded into
+`run/harness/liasmediaplayer/bin/`.
 
 ```bash
 ./gradlew :platform:buildAll

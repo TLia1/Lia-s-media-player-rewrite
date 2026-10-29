@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 
 import com.lia.mediaplayer.core.MediaPlayerCore;
 import com.lia.mediaplayer.core.testing.FakePlatform;
+import com.lia.mediaplayer.core.testing.TestCores;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -16,7 +17,7 @@ class MediaPlayerUiTest {
 
     @Test
     void countsTicks() {
-        try (var core = new MediaPlayerCore(new FakePlatform(gameDir))) {
+        try (var core = new MediaPlayerCore(new FakePlatform(gameDir), TestCores.OFFLINE)) {
             var ui = new MediaPlayerUi(core);
             ui.tick();
             ui.tick();
@@ -26,7 +27,7 @@ class MediaPlayerUiTest {
 
     @Test
     void forwardsWorldLeftToTheCore() {
-        try (var core = new MediaPlayerCore(new FakePlatform(gameDir))) {
+        try (var core = new MediaPlayerCore(new FakePlatform(gameDir), TestCores.OFFLINE)) {
             assertThatCode(() -> new MediaPlayerUi(core).worldLeft()).doesNotThrowAnyException();
         }
     }

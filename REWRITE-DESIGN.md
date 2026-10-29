@@ -618,11 +618,16 @@ ffmpeg -nostdin -hide_banner -loglevel error
   steps (360, 480, 720 or 1080 lines, bounded by the setting) that covers the
   window's on-screen size. A resize that crosses a step relaunches the session once
   the resize has been still for 500 ms.
-- **Frame geometry without a probe (to prototype):** writing frames as
-  `-f image2pipe -c:v pam` gives each frame a ~70-byte text header with its width
-  and height. That removes the dependency on a probe for geometry and handles
-  adaptive streams that change resolution mid-way. If the prototype shows a cost,
-  stay with `rawvideo` and the probe.
+- **Frame geometry from the stream (PAM, adopted in M1):** frames are written as
+  `-f image2pipe -c:v pam`, so each carries a ~70-byte text header with its width
+  and height. ffmpeg decides the output size and says what it decided, which handles
+  adaptive streams that change resolution mid-way, non-square pixels and rotation
+  metadata. The prototype measured no cost: 600 frames of 1080p scaled to 720p took
+  the same time with PAM as with `rawvideo` (1.20 s against 1.22 s wall, within
+  noise). It also found the case that decides it: a phone clip tagged with a 90°
+  rotation probes as 640×360 but is written as 405×720, so `rawvideo` sized from the
+  probe would have garbled every such video. Probes are still run for direct files,
+  for their tracks, frame rate and duration, not for geometry.
 - **Probes** run only when metadata is unknown (direct files and manifests) and are
   cached per URL for the game session.
 - **stderr** is captured into a bounded ring (last 16 KB) and handed to
@@ -675,7 +680,9 @@ the rings until they are full, then ffmpeg blocks on its pipe. Resume continues 
 place if the pause was shorter than 10 s; a longer pause relaunches at the paused
 position, because remote servers drop idle connections. v2 relaunched on every
 video resume because its in-place resume froze; that freeze came from the decode
-thread and the pipe interacting. The ring design below avoids it, and a test pins it.
+thread and the pipe interacting. The ring design below avoids it, and a test pins it
+(`PlayerIntegrationTest.aShortPauseResumesInPlaceAndKeepsPlaying`: pause, resume
+with no new session, frames until the end). Settled in M1.
 
 **Hidden players.** A hidden window's player keeps decoding by default, but frames
 are recycled without being copied or uploaded. A setting "When hidden: keep video /
@@ -713,7 +720,7 @@ public final class Playback implements AutoCloseable {
 ```java
 public interface AudioSink extends AutoCloseable {
     void open(AudioFormat format) throws AudioException;
-    int write(ByteBuffer pcm);          // blocking
+    int write(byte[] pcm, int offset, int length);  // blocking; byte[] because Java Sound takes one
     void start();
     void stop();
     void flush();
@@ -746,11 +753,14 @@ public interface AudioSink extends AutoCloseable {
 
 ### 6.8 Video frames to the GPU
 
-- `FramePool` holds direct `ByteBuffer`s of the current frame size, allocated once
-  per size. `FrameRing` is a bounded single-producer, single-consumer ring of
-  `VideoFrame(gen, ptsMicros, buffer)` records.
-- The reader thread reads a whole frame into a pooled buffer with a
-  `ReadableByteChannel` (no `byte[]` copies) and blocks when the ring is full.
+- `FramePool` holds frames of the current size, allocated once per size. `FrameRing`
+  is a bounded ring of pooled `VideoFrame`s (generation, due time, RGBA pixels), one
+  per session. Unlike `PcmRing` it takes a `ReentrantLock`: two threads consume it (the
+  view takes the newest due frame, the player's actor drops superseded ones when no view
+  is attached), and the reader is a virtual thread that must not pin its carrier while
+  it waits for room. A lock held for a few array moves per frame costs nothing visible.
+- The reader thread reads each PAM header, then the whole frame straight into a pooled
+  frame's array (one copy, out of the process pipe), and blocks when the ring is full.
 - On the client thread, during the render pass, `VideoView.prepare(clockMicros)`
   drops due-but-superseded frames back to the pool, then uploads the newest due
   frame through `TextureService.upload`. At most one upload per player per frame.
@@ -1376,7 +1386,7 @@ Decided by the maintainer on 2026-10-29.
 | 1 | Minecraft versions at launch | **1.21.1, 1.21.11 and the latest 26.x**, on both loaders. Others are added back if players ask; adding a target is a `platform`-only change. |
 | 2 | Own toolkit or vanilla widgets in screens | **Own toolkit** (§7.1). |
 | 3 | Mixins | **The single chat-display mixin** of §5.5; loader events everywhere else. |
-| 4 | PAM framing or probe + rawvideo | **Open** — settled by the M1 prototype. |
+| 4 | PAM framing or probe + rawvideo | **PAM** (M1 prototype, §6.4): no measurable cost, and the only one of the two that gets rotated and adaptive streams right. |
 | 5 | OpenAL sink | **Open** — not in the first release; prototype after M7. |
 | 6 | Hidden-player default | **Keep decoding** (v2 behaviour), with a "sound only when hidden" setting for weak machines. |
 | 7 | Disk cache default | **100 MB**, user-adjustable, with a "clear cache" button in settings. |

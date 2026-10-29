@@ -8,21 +8,24 @@ import java.util.Queue;
 
 /**
  * A {@link Platform} for tests. Its client thread is a queue the test drains with
- * {@link #runClientTasks()}, and the calling thread counts as the client thread.
+ * {@link #runClientTasks()}, and the thread that created it counts as the client thread.
  */
 public final class FakePlatform implements Platform {
 
     private final Path gameDirectory;
+    private final Thread owner = Thread.currentThread();
     private final Queue<Runnable> clientTasks = new ArrayDeque<>();
     private final ClientThread clientThread = new ClientThread() {
         @Override
         public void execute(Runnable task) {
-            clientTasks.add(task);
+            synchronized (clientTasks) {
+                clientTasks.add(task);
+            }
         }
 
         @Override
         public boolean isCurrent() {
-            return true;
+            return Thread.currentThread() == owner;
         }
     };
 
@@ -49,10 +52,16 @@ public final class FakePlatform implements Platform {
     public int runClientTasks() {
         int ran = 0;
         Runnable task;
-        while ((task = clientTasks.poll()) != null) {
+        while ((task = poll()) != null) {
             task.run();
             ran++;
         }
         return ran;
+    }
+
+    private Runnable poll() {
+        synchronized (clientTasks) {
+            return clientTasks.poll();
+        }
     }
 }
