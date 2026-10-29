@@ -156,8 +156,7 @@ class YtDlpResolverTest {
 
     @Test
     void unknownEntriesOfACollectionPlayAsItsKind() throws IOException {
-        var playlist =
-                new MediaRef("https://soundcloud.com/a/sets/b", MediaKind.COLLECTION, "test:set", Text.literal("x"));
+        MediaRef playlist = sources.match("https://soundcloud.com/a/sets/b").orElseThrow();
         var collection = CollectionExpander.parse(
                 "{\"entries\": [{\"url\": \"https://api.soundcloud.example/track/1\"}]}", playlist, sources);
         assertThat(collection.entries()).singleElement().satisfies(entry -> {

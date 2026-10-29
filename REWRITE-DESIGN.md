@@ -398,7 +398,7 @@ public interface ClientEvents {
     void screenOpened(ScreenContext screen);                     // a screen was built or rebuilt
     void hotkeyPressed(Hotkey hotkey);                           // a mod key mapping
     void worldLeft();
-    // M3: Text chatDisplayed(Text message, @Nullable String sender);
+    List<ChatLink> chatDisplayed(List<String> runs, @Nullable String sender);  // M3
     // M4: a ButtonSink for vanilla buttons on vanilla screens
 }
 ```
@@ -410,9 +410,11 @@ Three simplifications compared with v2:
   synthesises moves, drags and double-clicks from that. This removes the Fabric
   drag reconstruction before 1.21.8 and the "no mouse move hook" problem, and makes
   drag behave the same on every target.
-- **Chat crosses as Minecraft-free `Text`.** `McChat` converts the parts of a
-  `Component` that matter (literal runs and their style) and converts the result back
-  (§8).
+- **Chat crosses as plain strings.** `McChat` flattens a `Component` into the text of its
+  styled runs; `core` answers with the spans to turn into labels (`ChatLink`: run, range,
+  label, hint, colour), and `McChat` rebuilds the `Component` itself, so every style `core`
+  does not need to change — fonts, a server's own hover — survives untouched (§8, settled
+  in M3). `UiHost.chatLinkAt(x, y)` is the reverse question: the link under the cursor.
 - **`ScreenContext` is an opaque record** (`kind`: NONE, CHAT, PAUSE, HOSTED, OTHER;
   plus "is the chat field empty"). `ui` never sees a `Screen`. The media controls are a
   hosted screen like any other; `ui` asks its `UiHost` which one is open.
@@ -487,11 +489,16 @@ v2 avoided mixins completely, at the cost of two workarounds. v3 allows them ins
 replaces and why none exists, `defaultRequire = 1` so a broken target fails at
 startup rather than silently, and a CI client smoke test per target (§16).
 
-Planned mixins:
+Mixins (settled in M3):
 
 | Mixin | Replaces |
 |---|---|
 | `ChatComponent` display entry (`addMessage` and its 26.1 variant) — rewrite the displayed `Component` | Fabric's `ALLOW_CHAT` cancel + re-inject + `ChatTrustLevel` re-evaluation, and the separate system-chat path. Works the same on NeoForge, and it only changes what is shown, so message signatures are not affected. |
+| `ChatListener.showMessageToPlayer`, head and return — read-only, records who sent the player message being shown | The chat is not told the sender, and the loaders' chat events fire when a message is *received*, which the chat-delay option separates from when it is *shown*. Needed for the blocked-senders filter. |
+
+A mixin reaches the mod only through a static: `McChat` holds the one the running mod
+installs, the only static state besides the entrypoints' reference. Loom remaps the
+mixins' target strings into the classes of the Fabric jar, so no refmap ships.
 
 Anything else stays on loader events. If a later need for a mixin comes up, it goes
 through the same rules.
@@ -796,9 +803,14 @@ public interface AudioSink extends AutoCloseable {
   - **new:** anything else (WebP, animated WebP, AVIF, APNG) through
     `FfmpegImageDecoder`, which asks ffmpeg for RGBA frames. It runs only when the
     tools are available, and fails cleanly when they are not.
-- Decoded frames are `int[]` ARGB or direct buffers. The upload to textures happens
-  on the client thread, a bounded number of frames per tick, so a large GIF never
-  causes a hitch.
+- Decoded frames are RGBA heap buffers, dropped once uploaded. The upload to textures
+  happens on the client thread, 16 MB of frames per tick at most, so a large GIF never
+  causes a hitch; a picture counts as ready only when every frame is up.
+- A still longer than 2048 px on its long side is scaled down once when decoded: it is
+  shown at most at screen size, and a 12-megapixel photo would hold 48 MB of texture.
+- One `ImageCache` (an `AsyncCache` of textured pictures, 256 MB by default) serves the
+  hover preview and the image windows: one download, decode and texture set per link.
+  Tenor and Giphy pages resolve through the resolver chain like any link (settled in M3).
 
 ### 6.10 Caches and HTTP
 
@@ -991,9 +1003,26 @@ Flow:
    event to the original URL and a hover hint. If the mod's click handling is ever
    bypassed, vanilla's own "open link?" prompt still works.
 
-**Finding the link under the cursor** is `McChat.urlAt(x, y)`, a version-specific
-call cached per cursor position and per frame (v2's `ChatHitTest`). The hover
-preview and click routing in `ui.overlay.ChatOverlay` only see the URL string.
+**Finding the link under the cursor** is `McChat.linkAt(x, y)` behind `UiHost.chatLinkAt`,
+a version-specific call cached per cursor position until the next tick (v2's
+`ChatHitTest`). The hover preview and click routing in `ui.overlay.ChatOverlay` only see
+the URL string.
+
+Settled in M3:
+
+- **Only the mod's own labels are acted on.** `ChatRewriter` remembers the links it
+  labelled (the last 1024); a hover or click on any other link — one the filter refused,
+  or a server's own clickable text — is left to the game, so the filter cannot be bypassed
+  by a link that happens to be clickable anyway.
+- **Look by what a link plays as:** pictures gold with no hint (the preview is the hover),
+  sounds green, videos and video lists aqua; the hint says what Alt and Shift do.
+- **Lists are collections everywhere.** SoundCloud sets and Bandcamp albums join YouTube
+  playlists as `COLLECTION`s; a `CollectionSource` says what its entries are, read through
+  `SourceRegistry.playsAs`, so a set opens the audio bar without anyone asking "is this
+  SoundCloud?".
+- **The filter has no screen yet.** `LinkFilter` (mode, host lists, blocked senders) is
+  applied to every message; it is set through `ChatRewriter.setFilter` and defaults to
+  allowing everything until the settings of M4 feed it.
 
 ---
 

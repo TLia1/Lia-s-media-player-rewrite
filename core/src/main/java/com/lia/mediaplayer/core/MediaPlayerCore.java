@@ -3,10 +3,13 @@ package com.lia.mediaplayer.core;
 import com.lia.mediaplayer.api.ApiVersion;
 import com.lia.mediaplayer.core.event.EventBus;
 import com.lia.mediaplayer.core.ffmpeg.ProbeCache;
+import com.lia.mediaplayer.core.image.ImageCache;
+import com.lia.mediaplayer.core.image.ImageLoader;
 import com.lia.mediaplayer.core.lifecycle.ClientThread;
 import com.lia.mediaplayer.core.lifecycle.CoreExecutors;
 import com.lia.mediaplayer.core.lifecycle.Disposer;
 import com.lia.mediaplayer.core.link.BuiltinSources;
+import com.lia.mediaplayer.core.link.ChatRewriter;
 import com.lia.mediaplayer.core.link.SourceRegistry;
 import com.lia.mediaplayer.core.net.Http;
 import com.lia.mediaplayer.core.platform.Platform;
@@ -15,8 +18,10 @@ import com.lia.mediaplayer.core.playback.PlaybackRegistry;
 import com.lia.mediaplayer.core.playback.PlayerServices;
 import com.lia.mediaplayer.core.resolve.CollectionExpander;
 import com.lia.mediaplayer.core.resolve.DirectResolver;
+import com.lia.mediaplayer.core.resolve.GiphyResolver;
 import com.lia.mediaplayer.core.resolve.ResolveCache;
 import com.lia.mediaplayer.core.resolve.ResolverChain;
+import com.lia.mediaplayer.core.resolve.TenorResolver;
 import com.lia.mediaplayer.core.resolve.YtDlpResolver;
 import com.lia.mediaplayer.core.storage.DataPaths;
 import com.lia.mediaplayer.core.tools.ProcessRunner;
@@ -55,10 +60,12 @@ public final class MediaPlayerCore implements AutoCloseable {
     private final EventBus events;
     private final ToolManager tools;
     private final SourceRegistry sources;
+    private final ChatRewriter chat;
     private final ResolverChain resolver;
     private final CollectionExpander collections;
     private final PlaybackEngine engine;
     private final PlaybackRegistry playbacks;
+    private final ImageCache images;
 
     public MediaPlayerCore(Platform platform) {
         this(platform, CoreOptions.defaults());
@@ -90,12 +97,15 @@ public final class MediaPlayerCore implements AutoCloseable {
                 ToolManager.systemToday());
 
         this.sources = new SourceRegistry(BuiltinSources.all());
+        this.chat = new ChatRewriter(sources);
         String youtubeClients = Objects.requireNonNullElse(
                 options.host().properties().apply("liasmediaplayer.ytdlp.clients"),
                 YtDlpResolver.DEFAULT_YOUTUBE_CLIENTS);
         this.resolver = new ResolverChain(
                 List.of(
                         new DirectResolver(clock),
+                        new GiphyResolver(clock),
+                        new TenorResolver(http, executors.io(), clock),
                         new YtDlpResolver(tools, processes, executors.io(), clock, YT_DLP_TIMEOUT, youtubeClients)),
                 new ResolveCache(clock, RESOLVE_CACHE_ENTRIES));
         this.collections = new CollectionExpander(tools, processes, executors.io(), sources, YT_DLP_TIMEOUT);
@@ -111,6 +121,12 @@ public final class MediaPlayerCore implements AutoCloseable {
                 System::nanoTime));
         this.playbacks =
                 disposer.add(new PlaybackRegistry(engine, collections, clientThread, RandomGenerator.getDefault()));
+
+        this.images = disposer.add(new ImageCache(
+                new ImageLoader(resolver, http, executors.io(), executors.decode()),
+                platform.textures(),
+                clientThread,
+                ImageCache.DEFAULT_MAX_BYTES));
 
         if (options.installTools()) {
             var unused = tools.start();
@@ -137,6 +153,11 @@ public final class MediaPlayerCore implements AutoCloseable {
         return sources;
     }
 
+    /** Which chat links become labels. */
+    public ChatRewriter chat() {
+        return chat;
+    }
+
     public ResolverChain resolver() {
         return resolver;
     }
@@ -154,10 +175,16 @@ public final class MediaPlayerCore implements AutoCloseable {
         return playbacks;
     }
 
+    /** The pictures of chat links and image windows. */
+    public ImageCache images() {
+        return images;
+    }
+
     /** Stops everything that belongs to the world the player just left. */
     public void onWorldLeft() {
         LOGGER.debug("World left");
         playbacks.closeAll();
+        images.clear();
     }
 
     /** Releases everything; called once when the game shuts down. */

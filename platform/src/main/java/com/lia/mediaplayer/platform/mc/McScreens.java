@@ -13,15 +13,17 @@ import net.minecraft.client.gui.screens.PauseScreen;
 import net.minecraft.client.gui.screens.Screen;
 import org.jspecify.annotations.Nullable;
 
-/** Which screen is open, as the UI sees it, and how the UI's own screens are shown. */
+/** Which screen is open, as the UI sees it, how the UI's own screens are shown, and the chat under the cursor. */
 public final class McScreens implements UiHost {
 
     private final McTextures textures;
     private final TextMeasurer measurer;
+    private final McChat chat;
 
-    McScreens(McTextures textures, TextMeasurer measurer) {
+    McScreens(McTextures textures, TextMeasurer measurer, McChat chat) {
         this.textures = textures;
         this.measurer = measurer;
+        this.chat = chat;
     }
 
     /** What {@code screen} is to the UI; {@code null} is no screen at all. */
@@ -68,5 +70,10 @@ public final class McScreens implements UiHost {
     @Override
     public Optional<UiScreen> currentScreen() {
         return Minecraft.getInstance().screen instanceof HostScreen host ? Optional.of(host.hosted()) : Optional.empty();
+    }
+
+    @Override
+    public Optional<String> chatLinkAt(double x, double y) {
+        return chat.linkAt(x, y);
     }
 }

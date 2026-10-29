@@ -7,7 +7,6 @@ import com.lia.mediaplayer.api.source.MediaRef;
 import com.lia.mediaplayer.api.source.WebUrls;
 import com.lia.mediaplayer.api.text.Text;
 import com.lia.mediaplayer.core.ModInfo;
-import com.lia.mediaplayer.core.link.BuiltinSources;
 import com.lia.mediaplayer.core.link.SourceRegistry;
 import com.lia.mediaplayer.core.tools.ProcessResult;
 import com.lia.mediaplayer.core.tools.ProcessRunner;
@@ -128,9 +127,7 @@ public final class CollectionExpander {
                 .filter(ref -> ref.kind() == MediaKind.VIDEO || ref.kind() == MediaKind.AUDIO)
                 .orElseGet(() -> new MediaRef(
                         url,
-                        collection.sourceId().equals(BuiltinSources.YOUTUBE_PLAYLIST)
-                                ? MediaKind.VIDEO
-                                : MediaKind.AUDIO,
+                        sources.playsAs(collection),
                         ENTRY_SOURCE,
                         Text.translatable("chat." + ModInfo.MOD_ID + ".label.collection_entry")));
     }

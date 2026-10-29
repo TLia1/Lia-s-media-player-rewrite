@@ -1,12 +1,14 @@
 # Lia's Media Player — v3
 
 A rewrite of Lia's Media Player. The design, the reasons behind it and the milestones are
-in [REWRITE-DESIGN.md](REWRITE-DESIGN.md). This repository is at **milestone M2**: on top of
-the headless engine of M1, the mod draws its own windows in game through a small UI toolkit
-of its own. `/show video <link>` opens a video window, `/show audio <link>` the compact
-audio bar; windows are live (move, resize, snap, Ctrl+wheel zoom, transport controls) over
-the chat and over the media controls screen, and show their picture on the HUD otherwise.
-Chat links, images and the library come with M3 and M4.
+in [REWRITE-DESIGN.md](REWRITE-DESIGN.md). This repository is at **milestone M3**: on top of
+the headless engine of M1 and the windows of M2, links posted in chat become labels —
+`[picture]`, `[gif]`, `[youtube]`, `[soundcloud]`, … for every site v2 knew. Hovering a
+picture label previews it (GIFs animate); clicking a label pins the picture in a window,
+plays a video in the front video window (Shift: a new window, Alt: sound only) or a sound in
+the audio bar. Windows are live (move, resize, snap, Ctrl+wheel zoom, transport controls)
+over the chat and over the media controls screen, and show their picture on the HUD
+otherwise. The library, settings (including the link filters' lists) and themes come with M4.
 
 ## Trying it in game
 
@@ -20,7 +22,10 @@ trailing `true` opens a new window instead of queueing into the front one):
 ```
 /show video https://www.youtube.com/watch?v=aqz-KE-bpKQ
 /show audio https://soundcloud.com/… true
+/show image https://tenor.com/view/…
 ```
+
+Or post a link in chat and click the label it becomes.
 
 Open the chat (`T`) to use the window's controls. "Open the media controls" in the game's
 controls screen (unbound by default) shows the windows live without the chat. The first

@@ -28,11 +28,13 @@ public final class ModBootstrap implements AutoCloseable {
     private final MediaPlayerCore core;
     private final MediaPlayerUi ui;
     private final McKeyMappings keys = new McKeyMappings();
+    private final McChat chat = new McChat();
 
     private ModBootstrap(McPlatform platform) {
         this.platform = platform;
         this.core = new MediaPlayerCore(platform);
-        this.ui = new MediaPlayerUi(core, new McScreens(platform.textures(), platform.text()));
+        this.ui = new MediaPlayerUi(core, new McScreens(platform.textures(), platform.text(), chat));
+        McChat.install(ui);
     }
 
     public static ModBootstrap start(McPlatform platform) {
@@ -56,6 +58,7 @@ public final class ModBootstrap implements AutoCloseable {
     /** End of a client tick: between two frames, the moment released textures are freed. */
     public void tick() {
         platform.textures().flushReleases();
+        chat.tick();
         keys.poll(ui);
         ui.tick();
     }
@@ -109,6 +112,7 @@ public final class ModBootstrap implements AutoCloseable {
 
     @Override
     public void close() {
+        McChat.install(null);
         core.close();
         platform.textures().close();
     }

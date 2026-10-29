@@ -90,32 +90,18 @@ public final class ShowCommand {
             return Optional.of(Text.translatable(Keys.COMMAND_UNSUPPORTED_URL));
         }
         MediaRef ref = match.get();
-        boolean video = ref.kind() == MediaKind.VIDEO || ref.kind() == MediaKind.COLLECTION;
-        switch (asked) {
-            case VIDEO -> {
-                if (!video) {
-                    return mismatch(ref, asked);
-                }
-                target.play(ref, false, newWindow);
-            }
-            case AUDIO -> {
-                if (!video && ref.kind() != MediaKind.AUDIO) {
-                    return mismatch(ref, asked);
-                }
-                target.play(ref, true, newWindow);
-            }
-            case IMAGE -> {
-                if (ref.kind() != MediaKind.IMAGE) {
-                    return mismatch(ref, asked);
-                }
-                return Optional.of(Text.translatable(Keys.COMMAND_IMAGES_LATER));
-            }
+        // A list plays as what it lists: a SoundCloud set is sound, a YouTube playlist video.
+        MediaKind plays = sources.playsAs(ref);
+        boolean fits = switch (asked) {
+            case VIDEO -> plays == MediaKind.VIDEO;
+            case AUDIO -> plays == MediaKind.VIDEO || plays == MediaKind.AUDIO;
+            case IMAGE -> plays == MediaKind.IMAGE;
+        };
+        if (!fits) {
+            return Optional.of(
+                    Text.translatable(Keys.COMMAND_KIND_MISMATCH, plays.name().toLowerCase(Locale.ROOT), asked.id()));
         }
+        target.play(ref, asked == Type.AUDIO, newWindow);
         return Optional.empty();
-    }
-
-    private static Optional<Text> mismatch(MediaRef ref, Type asked) {
-        return Optional.of(
-                Text.translatable(Keys.COMMAND_KIND_MISMATCH, ref.kind().name().toLowerCase(Locale.ROOT), asked.id()));
     }
 }

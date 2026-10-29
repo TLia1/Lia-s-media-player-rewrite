@@ -82,6 +82,11 @@ public abstract class Window extends Container {
         return true;
     }
 
+    /** Whether the wheel alone zooms, for a window with nothing else to scroll. Ctrl+wheel always does. */
+    protected boolean wheelZooms() {
+        return false;
+    }
+
     /** What kind of window this is, for placement: windows of a kind cascade together. */
     public abstract String kind();
 
@@ -124,6 +129,12 @@ public abstract class Window extends Container {
 
     public final Rect frame() {
         return bounds();
+    }
+
+    /** The area windows live in, as of the last frame; empty before the first. */
+    protected final Rect screen() {
+        WindowManager owner = manager;
+        return owner == null ? Rect.EMPTY : owner.screen();
     }
 
     public final boolean isPlaced() {
@@ -233,7 +244,7 @@ public abstract class Window extends Container {
                 yield true;
             }
             case InputEvent.Scroll scroll -> {
-                if (scroll.mods().primary() && isResizable()) {
+                if ((scroll.mods().primary() || wheelZooms()) && isResizable()) {
                     zoom(scroll.x(), scroll.y(), Math.pow(ZOOM_STEP, Math.signum(scroll.delta())));
                 } else {
                     super.onInput(event, ctx);

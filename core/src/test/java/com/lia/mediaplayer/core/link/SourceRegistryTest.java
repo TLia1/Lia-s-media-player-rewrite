@@ -33,7 +33,25 @@ class SourceRegistryTest {
         "https://cdn.example/a/b.webm, liasmediaplayer:video_file, VIDEO",
         "https://cdn.example/song.flac, liasmediaplayer:audio_file, AUDIO",
         "https://cdn.example/live/index.m3u8, liasmediaplayer:stream, VIDEO",
-        "https://cdn.example/dash.mpd, liasmediaplayer:stream, VIDEO"
+        "https://cdn.example/dash.mpd, liasmediaplayer:stream, VIDEO",
+        "https://cdn.discordapp.com/attachments/1/2/cat.PNG, liasmediaplayer:picture, IMAGE",
+        "https://i.imgur.com/abc.jpeg?x=1, liasmediaplayer:picture, IMAGE",
+        "https://media.tenor.com/abc/dance.gif, liasmediaplayer:picture, IMAGE",
+        "https://tenor.com/view/cat-dance-gif-12345, liasmediaplayer:tenor, IMAGE",
+        "https://tenor.com/fr/view/cat-gif-12345, liasmediaplayer:tenor, IMAGE",
+        "https://giphy.com/gifs/funny-cat-JIX9t2j0ZTN9S, liasmediaplayer:giphy, IMAGE",
+        "https://www.twitch.tv/somestreamer, liasmediaplayer:twitch, VIDEO",
+        "https://m.twitch.tv/videos/123, liasmediaplayer:twitch, VIDEO",
+        "https://vimeo.com/76979871, liasmediaplayer:vimeo, VIDEO",
+        "https://vimeo.com/76979871/abcdef, liasmediaplayer:vimeo, VIDEO",
+        "https://player.vimeo.com/video/76979871, liasmediaplayer:vimeo, VIDEO",
+        "https://streamable.com/abc12, liasmediaplayer:streamable, VIDEO",
+        "https://streamable.com/e/abc12, liasmediaplayer:streamable, VIDEO",
+        "https://v.redd.it/abc123, liasmediaplayer:reddit, VIDEO",
+        "https://www.reddit.com/r/videos/comments/abc/title/, liasmediaplayer:reddit, VIDEO",
+        "https://artist.bandcamp.com/track/song, liasmediaplayer:bandcamp, AUDIO",
+        "https://artist.bandcamp.com/album/record, liasmediaplayer:bandcamp_album, COLLECTION",
+        "https://soundcloud.com/artist/sets/mix, liasmediaplayer:soundcloud_set, COLLECTION"
     })
     void recognisesTheBuiltInLinks(String url, String source, MediaKind kind) {
         MediaRef ref = registry.match(url).orElseThrow();
@@ -54,6 +72,18 @@ class SourceRegistryTest {
                 "https://notyoutube.com/watch?v=abc",
                 "https://cdn.example/page.html",
                 "https://cdn.example/mp4",
+                "https://cdn.example/a.webp",
+                "https://tenor.com/search/cats",
+                "https://giphy.com/gifs/cats",
+                "https://giphy.com/explore/cats",
+                "https://www.twitch.tv/",
+                "https://vimeo.com/channels/staffpicks",
+                "https://player.vimeo.com/video/",
+                "https://streamable.com/",
+                "https://streamable.com/averyverylongname",
+                "https://www.reddit.com/r/videos/",
+                "https://artist.bandcamp.com/",
+                "https://notbandcamp.com/track/x",
                 "file:///home/me/a.mp4",
                 "javascript:alert(1)",
                 "-https://cdn.example/a.mp4"
@@ -108,5 +138,33 @@ class SourceRegistryTest {
         assertThat(BuiltinSources.isDirect(BuiltinSources.AUDIO_FILE)).isTrue();
         assertThat(BuiltinSources.isDirect(BuiltinSources.STREAM)).isTrue();
         assertThat(BuiltinSources.isDirect(BuiltinSources.YOUTUBE)).isFalse();
+    }
+
+    @Test
+    void aListPlaysAsWhatItLists() {
+        assertThat(registry.playsAs(
+                        registry.match("https://soundcloud.com/a/sets/b").orElseThrow()))
+                .isEqualTo(MediaKind.AUDIO);
+        assertThat(registry.playsAs(
+                        registry.match("https://a.bandcamp.com/album/b").orElseThrow()))
+                .isEqualTo(MediaKind.AUDIO);
+        assertThat(registry.playsAs(
+                        registry.match("https://youtube.com/playlist?list=PL1").orElseThrow()))
+                .isEqualTo(MediaKind.VIDEO);
+        assertThat(registry.playsAs(registry.match("https://a.example/x.png").orElseThrow()))
+                .isEqualTo(MediaKind.IMAGE);
+        var unknown = new MediaRef("https://a.example/list", MediaKind.COLLECTION, "test:list", Text.literal("x"));
+        assertThat(registry.playsAs(unknown)).isEqualTo(MediaKind.VIDEO);
+    }
+
+    @Test
+    void giphyPagesBecomeTheirGif() {
+        assertThat(BuiltinSources.giphyGif(URI.create("https://giphy.com/gifs/funny-cat-JIX9t2j0ZTN9S")))
+                .contains("https://i.giphy.com/media/JIX9t2j0ZTN9S/giphy.gif");
+        assertThat(BuiltinSources.giphyGif(URI.create("https://giphy.com/stickers/JIX9t2j0ZTN9S/extra")))
+                .contains("https://i.giphy.com/media/JIX9t2j0ZTN9S/giphy.gif");
+        assertThat(BuiltinSources.giphyGif(URI.create("https://giphy.com/gifs/bad-id-1234567!")))
+                .isEmpty();
+        assertThat(BuiltinSources.labelKeys()).contains("chat.liasmediaplayer.label.gif");
     }
 }

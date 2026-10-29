@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.lia.mediaplayer.platform.mc.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "ChatComponentMixin",
+    "ChatListenerMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

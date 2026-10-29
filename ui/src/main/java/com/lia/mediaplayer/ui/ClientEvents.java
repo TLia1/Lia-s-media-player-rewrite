@@ -1,9 +1,12 @@
 package com.lia.mediaplayer.ui;
 
+import com.lia.mediaplayer.core.link.ChatLink;
 import com.lia.mediaplayer.ui.canvas.Canvas;
 import com.lia.mediaplayer.ui.input.InputEvent;
 import com.lia.mediaplayer.ui.input.Mods;
 import com.lia.mediaplayer.ui.screen.ScreenContext;
+import java.util.List;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The moments the game tells the mod about, called by the loader bridges on the client
@@ -37,6 +40,16 @@ public interface ClientEvents {
 
     /** A key mapping of the mod was pressed, in the world or over a screen. */
     void hotkeyPressed(Hotkey hotkey);
+
+    /**
+     * A chat message is about to be shown. The platform hands over its text split where its
+     * style changes, and replaces the returned spans with labels; an empty answer — almost
+     * every message — means the message is shown as it came. Any thread the game shows chat on.
+     *
+     * @param sender the display name of the player who sent it, or {@code null} for a system
+     *     message
+     */
+    List<ChatLink> chatDisplayed(List<String> runs, @Nullable String sender);
 
     /** The player left a world (disconnect, or back to the title screen). */
     void worldLeft();

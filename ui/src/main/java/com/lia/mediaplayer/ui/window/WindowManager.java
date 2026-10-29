@@ -162,6 +162,11 @@ public final class WindowManager {
         window.setFrame(Placement.initial(screen, window.preferredSize(), others));
     }
 
+    /** Whether a window is under {@code (x, y)}. */
+    public boolean covers(double x, double y) {
+        return windowAt(x, y) != null;
+    }
+
     private boolean coveredAbove(int index, double x, double y) {
         for (int i = index + 1; i < windows.size(); i++) {
             if (windows.get(i).frame().contains(x, y)) {

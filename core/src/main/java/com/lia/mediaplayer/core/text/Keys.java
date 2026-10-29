@@ -11,6 +11,7 @@ public final class Keys {
 
     private static final String GUI = "gui." + ModInfo.MOD_ID + ".";
     private static final String COMMAND = "command." + ModInfo.MOD_ID + ".";
+    private static final String CHAT = "chat." + ModInfo.MOD_ID + ".";
 
     /** {@code %s}: what follows the word, such as the queued count. */
     public static final String TIME_LIVE = GUI + "time.live";
@@ -34,6 +35,16 @@ public final class Keys {
     public static final String COPY_LINK = GUI + "tooltip.copy_link";
     public static final String OPEN_IN_BROWSER = GUI + "tooltip.open_in_browser";
 
+    public static final String IMAGE_LOADING = GUI + "image.loading";
+    public static final String IMAGE_FAILED = GUI + "image.load_failed";
+
+    /** The hover hints of chat labels: what a click and its modifiers do. */
+    public static final String CHAT_HINT_VIDEO = CHAT + "hint.video";
+
+    public static final String CHAT_HINT_AUDIO = CHAT + "hint.audio";
+    public static final String CHAT_HINT_COLLECTION = CHAT + "hint.collection";
+    public static final String CHAT_HINT_AUDIO_COLLECTION = CHAT + "hint.audio_collection";
+
     public static final String CONTROLS_TITLE = GUI + "controls.title";
     public static final String CONTROLS_HINT = GUI + "controls.hint";
     public static final String CONTROLS_EMPTY = GUI + "controls.empty";
@@ -44,8 +55,6 @@ public final class Keys {
     public static final String COMMAND_UNSUPPORTED_URL = COMMAND + "unsupported_url";
     /** {@code %s}: what the link is; {@code %s}: what it was asked to play as. */
     public static final String COMMAND_KIND_MISMATCH = COMMAND + "kind_mismatch";
-
-    public static final String COMMAND_IMAGES_LATER = COMMAND + "images_not_yet";
 
     public static final String KEY_CATEGORY = "key.category." + ModInfo.MOD_ID + ".main";
     public static final String KEY_CONTROLS = "key." + ModInfo.MOD_ID + ".controls";
@@ -71,13 +80,18 @@ public final class Keys {
                 CLOSE,
                 COPY_LINK,
                 OPEN_IN_BROWSER,
+                IMAGE_LOADING,
+                IMAGE_FAILED,
+                CHAT_HINT_VIDEO,
+                CHAT_HINT_AUDIO,
+                CHAT_HINT_COLLECTION,
+                CHAT_HINT_AUDIO_COLLECTION,
                 CONTROLS_TITLE,
                 CONTROLS_HINT,
                 CONTROLS_EMPTY,
                 COMMAND_INVALID_TYPE,
                 COMMAND_UNSUPPORTED_URL,
                 COMMAND_KIND_MISMATCH,
-                COMMAND_IMAGES_LATER,
                 KEY_CATEGORY,
                 KEY_CONTROLS);
     }

@@ -1,5 +1,6 @@
 package com.lia.mediaplayer.core.link;
 
+import com.lia.mediaplayer.api.media.MediaKind;
 import com.lia.mediaplayer.api.source.LinkSource;
 import com.lia.mediaplayer.api.source.MediaRef;
 import com.lia.mediaplayer.api.source.WebUrls;
@@ -50,6 +51,22 @@ public final class SourceRegistry {
             }
         }
         return Optional.empty();
+    }
+
+    /**
+     * What {@code ref} plays as: its own kind, or for a collection the kind of its entries —
+     * video when its source does not say.
+     */
+    public MediaKind playsAs(MediaRef ref) {
+        if (ref.kind() != MediaKind.COLLECTION) {
+            return ref.kind();
+        }
+        for (LinkSource source : sources) {
+            if (source.id().equals(ref.sourceId()) && source instanceof CollectionSource collection) {
+                return collection.entryKind();
+            }
+        }
+        return MediaKind.VIDEO;
     }
 
     public List<LinkSource> sources() {

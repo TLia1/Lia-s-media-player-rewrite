@@ -1,6 +1,8 @@
 package com.lia.mediaplayer.core.link;
 
 import java.net.URI;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 
@@ -31,6 +33,22 @@ final class Links {
         int slash = path.lastIndexOf('/');
         int dot = path.lastIndexOf('.');
         return dot > slash ? path.substring(dot + 1) : "";
+    }
+
+    /** The lower-cased path's non-empty segments: {@code /a//b/} is {@code [a, b]}. */
+    static List<String> segments(URI uri) {
+        return split(path(uri));
+    }
+
+    /** The non-empty segments of {@code path}, as written. */
+    static List<String> split(String path) {
+        var segments = new ArrayList<String>();
+        for (String segment : path.split("/", -1)) {
+            if (!segment.isEmpty()) {
+                segments.add(segment);
+            }
+        }
+        return segments;
     }
 
     /** The first non-blank value of query parameter {@code name}. */

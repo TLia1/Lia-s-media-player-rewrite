@@ -3,6 +3,10 @@ loaderVersion = "${loader_version_range}"
 # One license field per file: the mod's. The bundled API classes are MIT (LICENSE-API in the jar).
 license = "${mod_license}"
 
+# The chat display mixins (see McChat).
+[[mixins]]
+config = "liasmediaplayer.mixins.json"
+
 [[mods]]
 modId = "${mod_id}"
 version = "${mod_version}"
