@@ -8,11 +8,15 @@ import com.lia.mediaplayer.core.CoreOptions;
 import com.lia.mediaplayer.core.MediaPlayerCore;
 import com.lia.mediaplayer.core.lifecycle.ClientThread;
 import com.lia.mediaplayer.core.platform.Platform;
+import com.lia.mediaplayer.core.platform.TextMeasurer;
 import com.lia.mediaplayer.core.playback.Playback;
 import com.lia.mediaplayer.core.playback.Player;
 import com.lia.mediaplayer.core.playback.PlayerOptions;
 import com.lia.mediaplayer.core.playback.PlayerSnapshot;
 import com.lia.mediaplayer.core.playback.PlayerState;
+import com.lia.mediaplayer.core.testing.FakePlatform;
+import com.lia.mediaplayer.core.testing.FakeText;
+import com.lia.mediaplayer.core.testing.FakeTextures;
 import com.lia.mediaplayer.core.tools.ToolState;
 import com.lia.mediaplayer.core.video.VideoFrame;
 import java.awt.image.BufferedImage;
@@ -93,6 +97,9 @@ public final class PlayUrl {
                 return Thread.currentThread() == clientThread;
             }
         };
+        var textures = new FakeTextures();
+        var text = new FakeText();
+        var clipboard = new FakePlatform(gameDir).clipboard();
         Platform platform = new Platform() {
             @Override
             public String describe() {
@@ -107,6 +114,27 @@ public final class PlayUrl {
             @Override
             public Path gameDirectory() {
                 return gameDir;
+            }
+
+            // A terminal shows no picture and no text: the headless stand-ins will do.
+            @Override
+            public FakeTextures textures() {
+                return textures;
+            }
+
+            @Override
+            public TextMeasurer text() {
+                return text;
+            }
+
+            @Override
+            public Clipboard clipboard() {
+                return clipboard;
+            }
+
+            @Override
+            public void openInBrowser(String link) {
+                say("open in browser: " + link);
             }
         };
 

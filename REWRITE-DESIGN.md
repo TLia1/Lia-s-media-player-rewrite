@@ -352,17 +352,23 @@ This is the only place where the Minecraft version or the loader matters.
 public interface Platform {
     ClientThread clientThread();     // Executor that runs on the client thread + isClientThread()
     TextureService textures();       // create, upload, release (deferred) GPU textures
-    ClipboardService clipboard();
-    BrowserService browser();        // open a URL in the system browser
+    TextMeasurer text();             // width and height of a Text with the game font
+    Clipboard clipboard();
+    void openInBrowser(String url);  // http(s) only
     ToastService toasts();
-    ScreenService screens();         // open a UiScreen in the host screen, close it, which screen is open
     KeyMappingService keys();        // register mappings, poll presses
     ListenerService listener();      // camera position and yaw for positional audio
     GameState game();                // paused?, master volume, gui scale, window size
-    TextMeasurer text();             // width and height of a Text with the game font
     Path gameDirectory();
 }
 ```
+
+`Platform` lives in `core`, so everything it names does too: `TextureRef`,
+`TextureService` and `TextMeasurer` are in `core.platform`, not `ui.canvas` (settled in
+M2). Showing a `UiScreen` is the one need that names a `ui` type, so it is not on
+`Platform` but on `ui.UiHost` (open, close, which mod screen is open), which the platform
+implements beside it. M2 has no general `KeyMappingService` yet: the platform registers one
+key mapping per `ui.Hotkey` and reports presses through `ClientEvents.hotkeyPressed`.
 
 `TextureService` is where the deferred-release rule lives:
 
@@ -384,13 +390,16 @@ loader bridges:
 
 ```java
 public interface ClientEvents {
-    void tick();                                            // end of client tick
-    void renderScreen(ScreenContext screen, Canvas canvas); // after a screen draws
-    void renderHud(Canvas canvas);                          // in-world HUD
-    boolean input(ScreenContext screen, InputEvent event);  // true = consumed
-    Text chatDisplayed(Text message, @Nullable String sender);
-    void screenInitialised(ScreenContext screen, ButtonSink buttons);
+    void tick();                                                 // end of client tick
+    void renderScreen(ScreenContext screen, Canvas canvas,       // after a screen draws, with the
+                      double mouseX, double mouseY, Mods mods);  // cursor and modifiers of this frame
+    void renderHud(ScreenContext screen, Canvas canvas);         // in-world HUD, under `screen`
+    boolean input(ScreenContext screen, InputEvent event);       // true = consumed
+    void screenOpened(ScreenContext screen);                     // a screen was built or rebuilt
+    void hotkeyPressed(Hotkey hotkey);                           // a mod key mapping
     void worldLeft();
+    // M3: Text chatDisplayed(Text message, @Nullable String sender);
+    // M4: a ButtonSink for vanilla buttons on vanilla screens
 }
 ```
 
@@ -404,8 +413,11 @@ Three simplifications compared with v2:
 - **Chat crosses as Minecraft-free `Text`.** `McChat` converts the parts of a
   `Component` that matter (literal runs and their style) and converts the result back
   (§8).
-- **`ScreenContext` is an opaque record** (`kind`: CHAT, MEDIA_CONTROLS, PAUSE,
-  HOSTED, OTHER; plus "is the chat field empty"). `ui` never sees a `Screen`.
+- **`ScreenContext` is an opaque record** (`kind`: NONE, CHAT, PAUSE, HOSTED, OTHER;
+  plus "is the chat field empty"). `ui` never sees a `Screen`. The media controls are a
+  hosted screen like any other; `ui` asks its `UiHost` which one is open.
+- The modifiers held during a drag cross with the cursor position (`PointerDrag` carries
+  them), because Shift pressed mid-drag frees a window from snapping.
 
 ### 5.3 `Canvas`: the drawing surface
 
@@ -764,8 +776,11 @@ public interface AudioSink extends AutoCloseable {
 - On the client thread, during the render pass, `VideoView.prepare(clockMicros)`
   drops due-but-superseded frames back to the pool, then uploads the newest due
   frame through `TextureService.upload`. At most one upload per player per frame.
-- `McTextures.upload` does one `memCopy` into the `NativeImage` and one texture
-  upload, as v2 does. Possible later improvements, each behind the same interface: a
+- `McTextures.upload` does one copy into a native staging buffer the texture owns and
+  one `glTexSubImage2D` from it: the same one copy and one upload as v2's `NativeImage`
+  path, without reflecting on `NativeImage`'s private pixel pointer before 1.21.5 (which
+  could not work on Fabric's intermediary names anyway). Settled in M2. Possible later
+  improvements, each behind the same interface: a
   ring of two textures to avoid stalling on a texture in use, or YUV upload with a
   conversion shader (a third of the bandwidth, but shaders are version-specific).
 - A window off screen or covered by a full-screen menu skips the upload.
@@ -853,14 +868,18 @@ on every widget so that narration can be added later through one platform hook.
 
 ```java
 public abstract class Widget {
-    protected Rect bounds = Rect.EMPTY;
-    public abstract Size measure(Constraints constraints);
-    public void layout(Rect bounds) { this.bounds = bounds; }
+    public abstract Size measure(Constraints constraints);       // constraints carry the font
+    public void layout(Rect bounds, Constraints constraints) { … } // a container measures its children here
     public abstract void render(Canvas canvas, RenderContext ctx);
     public boolean onInput(InputEvent event, InputContext ctx) { return false; }
-    public Optional<List<Text>> tooltip(int x, int y) { return Optional.empty(); }
+    public Optional<List<Text>> tooltip(double x, double y) { return Optional.empty(); }
 }
 ```
+
+`layout` takes the constraints because a container measures its children while it lays
+them out, and measuring text needs the font (settled in M2). A widget that takes a press
+can capture the pointer through `InputContext`, so the drags and the release go to it
+wherever the cursor goes.
 
 - Containers: `Row`, `Column`, `Stack`, `ScrollPane`, with padding, gaps, fixed and
   flex sizes. Layout runs only when something is marked dirty (resize, content

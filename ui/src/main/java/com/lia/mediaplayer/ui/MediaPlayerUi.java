@@ -1,33 +1,184 @@
 package com.lia.mediaplayer.ui;
 
+import com.lia.mediaplayer.api.source.MediaRef;
+import com.lia.mediaplayer.api.source.ResolveOptions;
 import com.lia.mediaplayer.core.MediaPlayerCore;
+import com.lia.mediaplayer.core.playback.PlayerOptions;
+import com.lia.mediaplayer.ui.canvas.Canvas;
+import com.lia.mediaplayer.ui.command.ShowCommand;
+import com.lia.mediaplayer.ui.input.InputEvent;
+import com.lia.mediaplayer.ui.input.Mods;
+import com.lia.mediaplayer.ui.input.PointerTracker;
+import com.lia.mediaplayer.ui.screen.MediaControlsScreen;
+import com.lia.mediaplayer.ui.screen.ScreenContext;
+import com.lia.mediaplayer.ui.screen.UiScreen;
+import com.lia.mediaplayer.ui.theme.Theme;
+import com.lia.mediaplayer.ui.theme.Themes;
+import com.lia.mediaplayer.ui.widget.RenderContext;
+import com.lia.mediaplayer.ui.window.Window;
+import com.lia.mediaplayer.ui.window.WindowManager;
+import com.lia.mediaplayer.ui.windows.AudioBar;
+import com.lia.mediaplayer.ui.windows.CorePlaybackControl;
+import com.lia.mediaplayer.ui.windows.VideoWindow;
+import java.util.Optional;
+import java.util.function.LongSupplier;
 
 /**
- * The root of the UI layer: owns windows, screens and overlays, and is what the loader
- * bridges call through {@link ClientEvents}.
+ * The root of the UI layer: owns the windows and the mod's screens, and is what the loader
+ * bridges call through {@link ClientEvents}. Client thread only.
+ *
+ * <p>Windows are live — hovered, clicked, dragged — over the chat and over a screen of the mod
+ * that shows them. Everywhere else they are drawn on the HUD, picture only.
  */
 public final class MediaPlayerUi implements ClientEvents {
 
     private final MediaPlayerCore core;
+    private final UiHost host;
+    private final LongSupplier nanoTime;
+    private final WindowManager windows = new WindowManager();
+    private final PointerTracker pointer = new PointerTracker();
+    private final ShowCommand show;
+    private Theme theme = Themes.DARK;
     private long ticks;
 
-    public MediaPlayerUi(MediaPlayerCore core) {
+    public MediaPlayerUi(MediaPlayerCore core, UiHost host) {
+        this(core, host, System::nanoTime);
+    }
+
+    public MediaPlayerUi(MediaPlayerCore core, UiHost host, LongSupplier nanoTime) {
         this.core = core;
+        this.host = host;
+        this.nanoTime = nanoTime;
+        this.show = new ShowCommand(core.sources(), this::play);
     }
 
-    @Override
-    public void tick() {
-        core.platform().clientThread().checkCurrent();
-        ticks++;
+    public WindowManager windows() {
+        return windows;
     }
 
-    @Override
-    public void worldLeft() {
-        core.onWorldLeft();
+    public ShowCommand showCommand() {
+        return show;
+    }
+
+    public Theme theme() {
+        return theme;
     }
 
     /** Client ticks seen since startup. */
     public long ticks() {
         return ticks;
+    }
+
+    // ---- Playing ------------------------------------------------------------
+
+    /**
+     * Plays {@code ref}: in the front window of its kind, queued after what plays there, or
+     * in a new window when there is none or {@code newWindow} asks for one.
+     */
+    public void play(MediaRef ref, boolean audioOnly, boolean newWindow) {
+        core.platform().clientThread().checkCurrent();
+        Optional<? extends Window> front = Optional.empty();
+        if (!newWindow) {
+            front = audioOnly ? windows.frontMost(AudioBar.class) : windows.frontMost(VideoWindow.class);
+        }
+        if (front.isPresent()) {
+            Window window = front.get();
+            if (window instanceof AudioBar bar) {
+                bar.control().enqueue(ref);
+            } else if (window instanceof VideoWindow video) {
+                video.control().enqueue(ref);
+            }
+            window.raise();
+            return;
+        }
+        PlayerOptions options = audioOnly
+                ? PlayerOptions.DEFAULT.withResolve(new ResolveOptions(ResolveOptions.DEFAULT.maxHeight(), true))
+                : PlayerOptions.DEFAULT;
+        var playback = core.playbacks().open(ref, options);
+        var control = new CorePlaybackControl(playback, core.playbacks());
+        windows.open(audioOnly ? new AudioBar(control, core.platform()) : new VideoWindow(control, core.platform()));
+    }
+
+    /** Opens the windows, live, without the chat. */
+    public void openMediaControls() {
+        host.openScreen(new MediaControlsScreen(this::theme, nanoTime, windows::isEmpty));
+    }
+
+    // ---- ClientEvents ---------------------------------------------------------
+
+    @Override
+    public void tick() {
+        core.platform().clientThread().checkCurrent();
+        ticks++;
+        windows.tick();
+    }
+
+    @Override
+    public void renderScreen(ScreenContext screen, Canvas canvas, double mouseX, double mouseY, Mods mods) {
+        if (!windowsLive(screen)) {
+            return;
+        }
+        InputEvent moved = pointer.moveTo(mouseX, mouseY, mods);
+        if (moved != null) {
+            windows.input(moved);
+        }
+        windows.render(canvas, new RenderContext(theme, nanoTime.getAsLong(), mouseX, mouseY, true));
+    }
+
+    @Override
+    public void renderHud(ScreenContext screen, Canvas canvas) {
+        if (windowsLive(screen)) {
+            // The screen draws them, live, over itself.
+            return;
+        }
+        windows.renderHud(canvas, new RenderContext(theme, nanoTime.getAsLong(), Double.NaN, Double.NaN, false));
+    }
+
+    @Override
+    public boolean input(ScreenContext screen, InputEvent event) {
+        if (!windowsLive(screen)) {
+            return false;
+        }
+        InputEvent stamped = switch (event) {
+            case InputEvent.PointerDown down ->
+                pointer.press(down.x(), down.y(), down.button(), down.mods(), nanoTime.getAsLong());
+            case InputEvent.PointerUp up -> pointer.release(up.x(), up.y(), up.button(), up.mods());
+            default -> event;
+        };
+        return windows.input(stamped);
+    }
+
+    @Override
+    public void screenOpened(ScreenContext screen) {
+        pointer.reset();
+        windows.cancelGestures();
+    }
+
+    @Override
+    public void hotkeyPressed(Hotkey hotkey) {
+        switch (hotkey) {
+            case MEDIA_CONTROLS -> {
+                if (host.currentScreen().orElse(null) instanceof MediaControlsScreen) {
+                    host.closeScreen();
+                } else {
+                    openMediaControls();
+                }
+            }
+        }
+    }
+
+    @Override
+    public void worldLeft() {
+        windows.closeAll();
+        core.onWorldLeft();
+    }
+
+    /** Whether windows are drawn live over {@code screen}, rather than on the HUD under it. */
+    private boolean windowsLive(ScreenContext screen) {
+        return switch (screen.kind()) {
+            case CHAT -> true;
+            case HOSTED -> host.currentScreen().map(UiScreen::showsWindows).orElse(false);
+            case NONE, PAUSE, OTHER -> false;
+        };
     }
 }

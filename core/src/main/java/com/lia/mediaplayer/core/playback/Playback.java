@@ -67,6 +67,25 @@ public final class Playback implements AutoCloseable {
         player = engine.play(ref, options, this::onPlayerState);
     }
 
+    /**
+     * Appends {@code ref} to the queue. If nothing is playing — no track yet, or the last one
+     * ended — it starts at once.
+     */
+    public void enqueue(MediaRef ref) {
+        if (closed) {
+            throw new IllegalStateException("Playback " + id + " is closed");
+        }
+        queue.add(ref);
+        Player current = player;
+        if (current == null || current.snapshot().state() instanceof PlayerState.Ended) {
+            next();
+        }
+    }
+
+    public boolean isClosed() {
+        return closed;
+    }
+
     /** Skips to the next track. {@code false} when there is none and nothing changed. */
     public boolean next() {
         Player current = player;

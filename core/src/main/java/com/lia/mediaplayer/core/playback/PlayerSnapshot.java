@@ -20,7 +20,8 @@ public record PlayerSnapshot(
         int videoWidth,
         int videoHeight) {
 
-    static PlayerSnapshot initial() {
+    /** Before anything is known: idle, at the start, no tracks. */
+    public static PlayerSnapshot initial() {
         return new PlayerSnapshot(
                 new PlayerState.Idle(), Duration.ZERO, Optional.empty(), Optional.empty(), false, false, 0, 0);
     }

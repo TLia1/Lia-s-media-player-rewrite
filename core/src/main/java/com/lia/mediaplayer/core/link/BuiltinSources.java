@@ -64,6 +64,14 @@ public final class BuiltinSources {
                         STREAM, MediaKind.VIDEO, "stream", 0, uri -> STREAM_EXTENSIONS.contains(Links.extension(uri))));
     }
 
+    /** The translation keys of the labels the built-in sources give their links. */
+    public static List<String> labelKeys() {
+        return all().stream()
+                .map(source -> ((Simple) source).labelKey())
+                .distinct()
+                .toList();
+    }
+
     /** The sources whose links ffmpeg opens as they are, with no resolution. */
     public static boolean isDirect(String sourceId) {
         return sourceId.equals(VIDEO_FILE) || sourceId.equals(AUDIO_FILE) || sourceId.equals(STREAM);
@@ -101,13 +109,16 @@ public final class BuiltinSources {
     private record Simple(String id, MediaKind kind, String labelName, int priority, Predicate<URI> test)
             implements LinkSource {
 
+        String labelKey() {
+            return "chat." + ModInfo.MOD_ID + ".label." + labelName;
+        }
+
         @Override
         public Optional<MediaRef> match(URI uri, String raw) {
             if (!test.test(uri)) {
                 return Optional.empty();
             }
-            return Optional.of(
-                    new MediaRef(raw, kind, id, Text.translatable("chat." + ModInfo.MOD_ID + ".label." + labelName)));
+            return Optional.of(new MediaRef(raw, kind, id, Text.translatable(labelKey())));
         }
     }
 }

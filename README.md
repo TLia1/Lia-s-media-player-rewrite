@@ -1,11 +1,31 @@
 # Lia's Media Player — v3
 
 A rewrite of Lia's Media Player. The design, the reasons behind it and the milestones are
-in [REWRITE-DESIGN.md](REWRITE-DESIGN.md). This repository is at **milestone M1**: the
-headless engine in `core` — tool management, link recognition, resolution through
-`yt-dlp -J`, ffmpeg sessions, the player and its queue — plays YouTube links and direct
-files from a terminal. The mod loads on Fabric and NeoForge for Minecraft 1.21.1 and
-installs its tools at startup, but shows nothing yet; windows come with M2.
+in [REWRITE-DESIGN.md](REWRITE-DESIGN.md). This repository is at **milestone M2**: on top of
+the headless engine of M1, the mod draws its own windows in game through a small UI toolkit
+of its own. `/show video <link>` opens a video window, `/show audio <link>` the compact
+audio bar; windows are live (move, resize, snap, Ctrl+wheel zoom, transport controls) over
+the chat and over the media controls screen, and show their picture on the HUD otherwise.
+Chat links, images and the library come with M3 and M4.
+
+## Trying it in game
+
+```bash
+./gradlew :platform:1.21.1-fabric:runClient
+```
+
+Open a world, then type a command (the link is the rest of the line and needs no quotes; a
+trailing `true` opens a new window instead of queueing into the front one):
+
+```
+/show video https://www.youtube.com/watch?v=aqz-KE-bpKQ
+/show audio https://soundcloud.com/… true
+```
+
+Open the chat (`T`) to use the window's controls. "Open the media controls" in the game's
+controls screen (unbound by default) shows the windows live without the chat. The first
+start downloads yt-dlp and ffmpeg into the game directory's `liasmediaplayer/bin/` unless they are found on
+the machine.
 
 ## Layout
 
@@ -13,7 +33,7 @@ installs its tools at startup, but shows nothing yet; windows come with M2.
 |---|---|---|
 | `api/` | Public API, published on its own for addon developers | No |
 | `core/` | The engine: links, resolution, tools, playback, library, settings | No |
-| `ui/` | The mod's own UI toolkit, windows and screens, drawn through a `Canvas` | No |
+| `ui/` | The mod's own UI toolkit (widgets, layout, input, themes), the windows, and the screens, drawn through a `Canvas` | No |
 | `platform/` | Adapters to the game (`mc/`) and the two loader entrypoints (`fabric/`, `neoforge/`) | Yes |
 | `build-logic/` | Gradle convention plugins | — |
 
@@ -38,9 +58,12 @@ Rules the build enforces:
 Runs the tests, coverage, formatting check, layering tests and guard check of the plain
 modules. Needs no Minecraft and takes seconds.
 
-The engine's integration tests (tagged `integration`) run real ffmpeg on media they
-generate, served by a local HTTP server; they need `ffmpeg` and `ffprobe` on `PATH` (or
-`FFMPEG_PATH`/`FFPROBE_PATH`) and skip themselves otherwise. No test touches the network.
+The integration tests (tagged `integration`) run real ffmpeg on media they generate, served
+by a local HTTP server; they need `ffmpeg` and `ffprobe` on `PATH` (or
+`FFMPEG_PATH`/`FFPROBE_PATH`) and skip themselves otherwise. One of them plays a clip from
+`/show` into a video window drawn on a recording canvas, the whole path short of the game.
+The UI's tests also check that the language files hold exactly the keys the code uses. No
+test touches the network.
 
 ```bash
 ./gradlew spotlessApply

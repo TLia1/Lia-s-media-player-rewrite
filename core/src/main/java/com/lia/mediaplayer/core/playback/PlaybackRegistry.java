@@ -43,27 +43,40 @@ public final class PlaybackRegistry implements AutoCloseable {
         var playback = new Playback(ids.incrementAndGet(), engine, options, random, playbacks::remove);
         playbacks.add(playback);
         if (ref.kind() == MediaKind.COLLECTION) {
-            var unused = collections
-                    .expand(ref)
-                    .whenCompleteAsync(
-                            (collection, error) -> {
-                                if (error != null) {
-                                    LOGGER.warn("Could not expand {}: {}", ref.url(), error.toString());
-                                    return;
-                                }
-                                if (!playbacks.contains(playback)) {
-                                    return;
-                                }
-                                playback.queue().addAll(collection.entries());
-                                if (playback.player().isEmpty()) {
-                                    playback.next();
-                                }
-                            },
-                            clientThread);
+            enqueue(playback, ref);
         } else {
             playback.play(ref);
         }
         return playback;
+    }
+
+    /**
+     * Appends {@code ref} to {@code playback}'s queue, starting it if nothing plays. A collection
+     * is expanded first, off the client thread, and its entries are appended in order once
+     * known; if the playback has closed by then, they are dropped.
+     */
+    public void enqueue(Playback playback, MediaRef ref) {
+        clientThread.checkCurrent();
+        if (ref.kind() != MediaKind.COLLECTION) {
+            playback.enqueue(ref);
+            return;
+        }
+        var unused = collections
+                .expand(ref)
+                .whenCompleteAsync(
+                        (collection, error) -> {
+                            if (error != null) {
+                                LOGGER.warn("Could not expand {}: {}", ref.url(), error.toString());
+                                return;
+                            }
+                            if (playback.isClosed() || collection.entries().isEmpty()) {
+                                return;
+                            }
+                            var entries = collection.entries();
+                            playback.enqueue(entries.getFirst());
+                            playback.queue().addAll(entries.subList(1, entries.size()));
+                        },
+                        clientThread);
     }
 
     public List<Playback> playbacks() {

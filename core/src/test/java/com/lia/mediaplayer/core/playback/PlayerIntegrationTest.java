@@ -391,6 +391,34 @@ class PlayerIntegrationTest {
     }
 
     @Test
+    void aLinkQueuedWhilePlayingWaitsAndOneQueuedAfterTheEndStartsAtOnce() {
+        try (var engine = TestEngine.create()) {
+            var log = new StateLog();
+            Playback playback = engine.client.call(() -> {
+                Playback opened = engine.registry.open(direct(engine, shortClip), PlayerOptions.DEFAULT);
+                opened.setListener(log);
+                engine.registry.enqueue(opened, direct(engine, shortClip + "?second"));
+                return opened;
+            });
+            assertThat(engine.client.call(() -> playback.queue().size())).isEqualTo(1);
+
+            await(TIMEOUT.multipliedBy(2), "both clips to end", () -> log.count(PlayerState.Ended.class) == 2);
+            assertThat(log.players.getLast().ref().url()).endsWith("?second");
+
+            // The queue has run dry; a link queued now plays straight away.
+            engine.client.run(() -> playback.enqueue(direct(engine, shortClip + "?third")));
+            await(
+                    TIMEOUT,
+                    "the third clip",
+                    () -> log.players.getLast().ref().url().endsWith("?third"));
+            engine.client.run(playback::close);
+            assertThat(engine.client.call(playback::isClosed)).isTrue();
+            assertThat(engine.client.call(() -> engine.registry.playbacks().isEmpty()))
+                    .isTrue();
+        }
+    }
+
+    @Test
     void closingAPlayerKillsItsFfmpeg() throws Exception {
         try (var engine = TestEngine.create()) {
             var log = new StateLog();
