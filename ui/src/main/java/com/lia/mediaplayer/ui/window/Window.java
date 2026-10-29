@@ -18,6 +18,8 @@ import com.lia.mediaplayer.ui.widget.RenderContext;
 import com.lia.mediaplayer.ui.widget.Row;
 import com.lia.mediaplayer.ui.widget.Size;
 import com.lia.mediaplayer.ui.widget.Widget;
+import java.util.ArrayList;
+import java.util.List;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -30,6 +32,9 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>A window is the root of its own widget tree: it lays the tree out again only when
  * something in it asked for it, or when it moved or changed size.
+ *
+ * <p>It can also hold {@linkplain #addPopup popups}: widgets that float over the rest, may reach
+ * past the frame, and count as part of the window while they show.
  */
 public abstract class Window extends Container {
 
@@ -52,6 +57,7 @@ public abstract class Window extends Container {
     private final Row titleBar = new Row();
     private final Label titleLabel;
     private final Animation focus = new Animation(0, FOCUS_FADE_NANOS, Easing.OUT_CUBIC);
+    private final List<Widget> popups = new ArrayList<>();
     private @Nullable WindowManager manager;
     private boolean placed;
     private boolean layoutDirty = true;
@@ -118,6 +124,17 @@ public abstract class Window extends Container {
         return column.add(body, 1);
     }
 
+    /**
+     * Adds a widget that floats over the window while it is visible: drawn above everything in
+     * it, offered the pointer first, and free to reach past the frame — the volume bar that rises
+     * over the audio bar. It is not part of the layout: whoever owns it places it with {@link
+     * Widget#layout} and shows or hides it. Call from the subclass constructor.
+     */
+    protected final <W extends Widget> W addPopup(W popup) {
+        popups.add(popup);
+        return popup;
+    }
+
     protected final void setTitle(Text title) {
         titleLabel.setText(title);
     }
@@ -135,6 +152,28 @@ public abstract class Window extends Container {
 
     public final Rect frame() {
         return bounds();
+    }
+
+    /** Whether {@code (x, y)} is on the window or on one of its popups that shows. */
+    final boolean reaches(double x, double y) {
+        return bounds().contains(x, y) || popupAt(x, y) != null;
+    }
+
+    /** The topmost popup that shows at {@code (x, y)}. */
+    private @Nullable Widget popupAt(double x, double y) {
+        for (int i = popups.size() - 1; i >= 0; i--) {
+            Widget popup = popups.get(i);
+            if (popup.isVisible() && popup.bounds().contains(x, y)) {
+                return popup;
+            }
+        }
+        return null;
+    }
+
+    @Override
+    public @Nullable Widget widgetAt(double x, double y) {
+        Widget popup = popupAt(x, y);
+        return popup != null ? popup.widgetAt(x, y) : super.widgetAt(x, y);
     }
 
     /** The area windows live in, as of the last frame; empty before the first. */
@@ -198,6 +237,11 @@ public abstract class Window extends Container {
         if (isResizable() && ctx.interactive() && (gesture == Gesture.RESIZE || ctx.hovered(b))) {
             drawGrip(canvas, ctx.color(lit > 0.5f ? Role.BORDER_FOCUSED : Role.BORDER));
         }
+        for (Widget popup : popups) {
+            if (popup.isVisible()) {
+                popup.render(canvas, ctx);
+            }
+        }
     }
 
     /**
@@ -227,6 +271,16 @@ public abstract class Window extends Container {
 
     @Override
     public boolean onInput(InputEvent event, InputContext ctx) {
+        Widget popup = switch (event) {
+            case InputEvent.PointerDown down -> popupAt(down.x(), down.y());
+            case InputEvent.Scroll scroll -> popupAt(scroll.x(), scroll.y());
+            default -> null;
+        };
+        if (popup != null) {
+            // Taken or not, a press or the wheel on a popup never reaches what is under it.
+            popup.onInput(event, ctx);
+            return true;
+        }
         return switch (event) {
             case InputEvent.PointerDown down -> {
                 if (down.button() == InputEvent.PRIMARY_BUTTON && isResizable() && onGrip(down.x(), down.y())) {

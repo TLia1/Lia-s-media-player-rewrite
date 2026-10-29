@@ -30,6 +30,12 @@ public interface Platform {
     /** Opens {@code url}, an {@code http(s)} link, in the system browser. Client thread only. */
     void openInBrowser(String url);
 
+    /**
+     * The game's master volume, linear, 0 to 1: the slider at the top of its sound options.
+     * Every player's own volume is scaled by it. Client thread only.
+     */
+    float masterVolume();
+
     /** The system clipboard, as text. */
     interface Clipboard {
 

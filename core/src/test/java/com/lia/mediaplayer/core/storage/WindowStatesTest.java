@@ -14,7 +14,7 @@ class WindowStatesTest {
         var codec = WindowStates.codec();
         var states = Map.of(
                 "video",
-                new WindowState(true, 10, 20, 300, 180, RepeatMode.ALL, true, true),
+                new WindowState(true, 10, 20, 300, 180, RepeatMode.ALL, true, true, 0.6f),
                 "audio",
                 WindowState.DEFAULT.withFrame(1, 2, 260, 0));
         assertThat(codec.decode(codec.encode(states))).isEqualTo(states);
@@ -30,6 +30,8 @@ class WindowStatesTest {
         assertThat(states.get("video").x()).isZero();
         assertThat(states.get("video").y()).isEqualTo(7);
         assertThat(states.get("video").repeat()).isEqualTo(RepeatMode.OFF);
+        // A file from before the volume was kept plays at full volume.
+        assertThat(states.get("video").volume()).isEqualTo(1f);
     }
 
     @Test
@@ -38,6 +40,8 @@ class WindowStatesTest {
         assertThat(state.sized()).isFalse();
         assertThat(state.height()).isZero();
         assertThat(state.withModes(RepeatMode.ONE, true).withQueueOpen(true))
-                .isEqualTo(new WindowState(true, 0, 0, 0, 0, RepeatMode.ONE, true, true));
+                .isEqualTo(new WindowState(true, 0, 0, 0, 0, RepeatMode.ONE, true, true, 1));
+        assertThat(state.withVolume(3).volume()).isEqualTo(1f);
+        assertThat(state.withVolume(-1).volume()).isZero();
     }
 }

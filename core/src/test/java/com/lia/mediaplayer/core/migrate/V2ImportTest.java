@@ -97,7 +97,7 @@ class V2ImportTest {
 
         var windows = WindowStates.codec()
                 .decode(JsonParser.parseString(read(paths.windows())).getAsJsonObject());
-        assertThat(windows.get("video")).isEqualTo(new WindowState(true, 5, 6, 322, 0, RepeatMode.ALL, true, true));
+        assertThat(windows.get("video")).isEqualTo(new WindowState(true, 5, 6, 322, 0, RepeatMode.ALL, true, true, 1));
         assertThat(windows.get("audio")).isEqualTo(WindowState.DEFAULT);
 
         for (String name : new String[] {"config.json", "playlists.json", "history.json", "windows.json"}) {

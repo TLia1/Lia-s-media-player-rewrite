@@ -12,6 +12,7 @@ import com.lia.mediaplayer.ui.theme.Role;
 import com.lia.mediaplayer.ui.widget.Column;
 import com.lia.mediaplayer.ui.widget.IconButton;
 import com.lia.mediaplayer.ui.widget.RenderContext;
+import com.lia.mediaplayer.ui.widget.Row;
 import com.lia.mediaplayer.ui.widget.Size;
 import com.lia.mediaplayer.ui.window.Placement;
 import com.lia.mediaplayer.ui.window.Window;
@@ -20,8 +21,8 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * A playback with its picture: the title strip with the heart, copy-link, open-in-browser,
- * theatre, hide and close; the picture; the transport bar; and, when asked for, the queue under
- * it. On the HUD it shows the picture only.
+ * theatre, hide and close; the picture; the transport bar under it; and, when asked for, the
+ * queue to the right of both. On the HUD it shows the picture only.
  *
  * <p>When the first frame arrives the window takes the picture's shape once, keeping its
  * width, unless it was resized by then; after that the picture is letterboxed. Theatre mode
@@ -56,10 +57,12 @@ public final class VideoWindow extends Window implements PlayerWindow {
                         .tooltip(Text.translatable(Keys.THEATER))),
                 addTitleButton(CornerButtons.hide(this::hide)),
                 addTitleButton(CornerButtons.close(this::close)));
-        var body = setBody(new Column());
-        view = body.add(new VideoView(control, services.platform().textures()), 1);
-        transport = body.add(new TransportBar(control, this::toggleQueue, this::isQueueOpen), 0, true);
-        queue = body.add(new QueuePanel(control, services.titles()), 0, true);
+        var body = setBody(new Row());
+        var player = body.add(new Column(), 1);
+        view = player.add(new VideoView(control, services.platform().textures()), 1);
+        transport = player.add(new TransportBar(control, this::toggleQueue, this::isQueueOpen), 0, true);
+        addPopup(transport.volumePopup());
+        queue = body.add(new QueuePanel(control, services.titles(), true), 0, true);
         queue.setVisible(false);
     }
 
@@ -75,17 +78,22 @@ public final class VideoWindow extends Window implements PlayerWindow {
 
     @Override
     public Size preferredSize() {
-        return new Size(DEFAULT_PICTURE_WIDTH + 2, DEFAULT_PICTURE_HEIGHT + chromeHeight());
+        return new Size(DEFAULT_PICTURE_WIDTH + chromeWidth(), DEFAULT_PICTURE_HEIGHT + chromeHeight());
     }
 
     @Override
     public Size minimumSize() {
-        return new Size(160, chromeHeight() + 40);
+        return new Size(158 + chromeWidth(), chromeHeight() + 40);
     }
 
-    /** Everything that is not picture: the edges, the title strip, the transport bar and the queue. */
+    /** Everything across that is not picture: the edges and the queue. */
+    private int chromeWidth() {
+        return 2 + (isQueueOpen() ? QueuePanel.WIDTH : 0);
+    }
+
+    /** Everything down that is not picture: the edges, the title strip and the transport bar. */
     private int chromeHeight() {
-        return 2 + TITLE_BAR + TransportBar.HEIGHT + (isQueueOpen() ? QueuePanel.HEIGHT : 0);
+        return 2 + TITLE_BAR + TransportBar.HEIGHT;
     }
 
     @Override
@@ -100,8 +108,8 @@ public final class VideoWindow extends Window implements PlayerWindow {
         }
         queue.setVisible(open);
         if (isPlaced()) {
-            int change = open ? QueuePanel.HEIGHT : -QueuePanel.HEIGHT;
-            Rect grown = frame().withSize(frame().width(), frame().height() + change);
+            int change = open ? QueuePanel.WIDTH : -QueuePanel.WIDTH;
+            Rect grown = frame().withSize(frame().width() + change, frame().height());
             Rect area = screen();
             setFrame(area.isEmpty() ? grown : grown.clampInto(area));
         }
@@ -143,8 +151,9 @@ public final class VideoWindow extends Window implements PlayerWindow {
         int aspectWidth = picture == null ? DEFAULT_PICTURE_WIDTH : picture.width();
         int aspectHeight = picture == null ? DEFAULT_PICTURE_HEIGHT : picture.height();
         int chrome = chromeHeight();
-        Rect fitted = area.inset(1, 0, 1, chrome).fit(aspectWidth, aspectHeight);
-        Rect frame = new Rect(fitted.x() - 1, fitted.y(), fitted.width() + 2, fitted.height() + chrome);
+        int side = chromeWidth();
+        Rect fitted = area.inset(1, 0, side - 1, chrome).fit(aspectWidth, aspectHeight);
+        Rect frame = new Rect(fitted.x() - 1, fitted.y(), fitted.width() + side, fitted.height() + chrome);
         setFrame(frame.clampInto(screen()));
         raise();
         return true;
@@ -201,7 +210,7 @@ public final class VideoWindow extends Window implements PlayerWindow {
         if (!frame().equals(openedAt)) {
             return;
         }
-        int pictureWidth = frame().width() - 2;
+        int pictureWidth = frame().width() - chromeWidth();
         int pictureHeight = (int) Math.round((double) pictureWidth * picture.height() / picture.width());
         setFrame(frame().withSize(frame().width(), pictureHeight + chromeHeight()));
     }

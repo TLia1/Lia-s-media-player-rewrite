@@ -13,7 +13,8 @@ import java.util.Map;
  * <pre>
  * { "schema": 1,
  *   "kinds": { "video": { "placed": true, "x": 10, "y": 20, "width": 300, "height": 0,
- *                         "repeat": "ALL", "shuffle": false, "queueOpen": true } } }
+ *                         "repeat": "ALL", "shuffle": false, "queueOpen": true,
+ *                         "volume": 0.6 } } }
  * </pre>
  */
 public final class WindowStates {
@@ -84,7 +85,8 @@ public final class WindowStates {
                 Json.integer(json, "height", d.height()),
                 Json.enumValue(json, "repeat", RepeatMode.OFF),
                 Json.bool(json, "shuffle", d.shuffle()),
-                Json.bool(json, "queueOpen", d.queueOpen()));
+                Json.bool(json, "queueOpen", d.queueOpen()),
+                Json.floatValue(json, "volume", d.volume()));
     }
 
     static JsonObject json(WindowState state) {
@@ -97,6 +99,7 @@ public final class WindowStates {
         json.addProperty("repeat", state.repeat().name());
         json.addProperty("shuffle", state.shuffle());
         json.addProperty("queueOpen", state.queueOpen());
+        json.addProperty("volume", state.volume());
         return json;
     }
 }

@@ -79,6 +79,44 @@ class AudioBarTest {
     }
 
     @Test
+    void theVolumeBarRisesPastTheTopOfTheBar() {
+        var bar = windows.open(new AudioBar(playback, WindowServices.of(new FakePlatform(gameDir))));
+        render(-1, -1);
+        bar.setFrame(bar.frame().withY(200));
+        render(-1, -1);
+        Rect speaker = bar.transport().children().get(5).bounds();
+        render(speaker.centerX(), speaker.centerY());
+        Rect popup = bar.transport().volumePopup().bounds();
+        assertThat(bar.transport().volumePopup().isVisible()).isTrue();
+        assertThat(popup.y()).as("above the frame").isLessThan(bar.frame().y());
+
+        // Out there it is still the bar's: it takes the press, the tooltip and the cursor.
+        double x = popup.centerX();
+        double y = popup.y() + VolumePopup.PADDING + VolumePopup.BAR_HEIGHT / 4.0;
+        render(x, y);
+        assertThat(windows.covers(x, y)).isTrue();
+        assertThat(canvas.tooltip().map(t -> t.lines().getFirst())).contains("gui.liasmediaplayer.tooltip.volume[100]");
+        windows.input(new InputEvent.PointerDown(x, y, 0, Mods.NONE, 1));
+        windows.input(new InputEvent.PointerUp(x, y, 0, Mods.NONE));
+        assertThat(playback.volume).isEqualTo(0.75f);
+        assertThat(bar.frame().y()).as("not dragged").isEqualTo(200);
+
+        // Once it folds, that spot is the chat's again.
+        render(-1, -1);
+        assertThat(windows.covers(x, y)).isFalse();
+    }
+
+    @Test
+    void atTheTopOfTheScreenTheVolumeBarHangsBelow() {
+        var bar = windows.open(new AudioBar(playback, WindowServices.of(new FakePlatform(gameDir))));
+        render(-1, -1);
+        bar.setFrame(bar.frame().withY(0));
+        render(-1, -1);
+        Rect speaker = bar.transport().children().get(5).bounds();
+        assertThat(bar.transport().volumePopup().bounds().y()).isEqualTo(speaker.bottom());
+    }
+
+    @Test
     void closingTheBarClosesItsPlayback() {
         var bar = windows.open(new AudioBar(playback, WindowServices.of(new FakePlatform(gameDir))));
         render(-1, -1);

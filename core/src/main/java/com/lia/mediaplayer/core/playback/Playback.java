@@ -11,8 +11,9 @@ import org.jspecify.annotations.Nullable;
  * "What plays": a player, its queue and its volume. It knows nothing about windows — a video
  * window, the audio bar, an addon surface or nothing at all (headless audio) can show it.
  *
- * <p>When a track ends the next one starts in a fresh player; the volume carries over. Client
- * thread only.
+ * <p>When a track ends the next one starts in a fresh player; the volume carries over. What the
+ * player hears is that volume scaled by the game's master volume, which the {@link
+ * PlaybackRegistry} keeps up to date. Client thread only.
  */
 public final class Playback implements AutoCloseable {
 
@@ -22,6 +23,7 @@ public final class Playback implements AutoCloseable {
     private final Consumer<Playback> onClosed;
     private final BiConsumer<Playback, MediaRef> onTrackStarted;
     private PlayerOptions options;
+    private float masterVolume = 1;
     private PlayerListener listener = PlayerListener.NONE;
     private @Nullable Player player;
     private boolean closed;
@@ -68,7 +70,7 @@ public final class Playback implements AutoCloseable {
         if (previous != null) {
             previous.close();
         }
-        player = engine.play(ref, options, this::onPlayerState);
+        player = engine.play(ref, options.withVolume(gain()), this::onPlayerState);
         onTrackStarted.accept(this, ref);
     }
 
@@ -124,14 +126,29 @@ public final class Playback implements AutoCloseable {
     /** Linear volume, kept for the tracks that follow. */
     public void setVolume(float volume) {
         options = options.withVolume(volume);
-        Player current = player;
-        if (current != null) {
-            current.setVolume(options.volume());
-        }
+        applyGain();
     }
 
+    /** This playback's own volume, before the game's master volume. */
     public float volume() {
         return options.volume();
+    }
+
+    void setMasterVolume(float volume) {
+        masterVolume = volume;
+        applyGain();
+    }
+
+    /** What the player plays at: this playback's volume times the game's. */
+    float gain() {
+        return options.volume() * masterVolume;
+    }
+
+    private void applyGain() {
+        Player current = player;
+        if (current != null) {
+            current.setVolume(gain());
+        }
     }
 
     private Optional<MediaRef> takeFirst() {

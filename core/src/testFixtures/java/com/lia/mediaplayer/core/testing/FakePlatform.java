@@ -37,6 +37,7 @@ public final class FakePlatform implements Platform {
     private final FakeText text = new FakeText();
     private final List<String> opened = new ArrayList<>();
     private String clipboardText = "";
+    private float masterVolume = 1;
     private final Clipboard clipboard = new Clipboard() {
         @Override
         public String get() {
@@ -86,6 +87,16 @@ public final class FakePlatform implements Platform {
     @Override
     public void openInBrowser(String url) {
         opened.add(url);
+    }
+
+    @Override
+    public float masterVolume() {
+        return masterVolume;
+    }
+
+    /** Moves the game's master volume slider. */
+    public void setMasterVolume(float volume) {
+        masterVolume = volume;
     }
 
     /** The links {@link #openInBrowser} was asked to open, in order. */

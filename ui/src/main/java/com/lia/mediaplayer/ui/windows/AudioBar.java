@@ -38,7 +38,8 @@ public final class AudioBar extends Window implements PlayerWindow {
         addTitleButton(CornerButtons.close(this::close));
         var body = setBody(new Column());
         transport = body.add(new TransportBar(control, this::toggleQueue, this::isQueueOpen), 0, true);
-        queue = body.add(new QueuePanel(control, services.titles()), 0, true);
+        addPopup(transport.volumePopup());
+        queue = body.add(new QueuePanel(control, services.titles(), false), 0, true);
         queue.setVisible(false);
     }
 
@@ -124,6 +125,10 @@ public final class AudioBar extends Window implements PlayerWindow {
 
     QueuePanel queue() {
         return queue;
+    }
+
+    TransportBar transport() {
+        return transport;
     }
 
     @Override

@@ -274,7 +274,8 @@ public final class V2Import {
                             0,
                             Json.enumValue(v2, "repeat", RepeatMode.OFF),
                             Json.bool(v2, "shuffle", false),
-                            Json.bool(v2, "queuePanel", false)));
+                            Json.bool(v2, "queuePanel", false),
+                            WindowState.DEFAULT.volume()));
         }
         return states;
     }

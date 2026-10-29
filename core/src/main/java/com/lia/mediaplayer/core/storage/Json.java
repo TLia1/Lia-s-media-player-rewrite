@@ -25,6 +25,10 @@ public final class Json {
         return read(json, key, JsonElement::getAsLong, fallback);
     }
 
+    public static float floatValue(JsonObject json, String key, float fallback) {
+        return read(json, key, JsonElement::getAsFloat, fallback);
+    }
+
     public static String string(JsonObject json, String key, String fallback) {
         return read(json, key, JsonElement::getAsString, fallback);
     }

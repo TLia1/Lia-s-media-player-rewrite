@@ -243,6 +243,27 @@ class PlayerIntegrationTest {
     }
 
     @Test
+    void theGamesMasterVolumeScalesEveryPlayback() {
+        try (var engine = TestEngine.create()) {
+            engine.client.run(() -> engine.registry.setMasterVolume(0.5f));
+            Playback playback = engine.client.call(
+                    () -> engine.registry.open(direct(engine, av), PlayerOptions.DEFAULT.withVolume(0.8f)));
+            await(TIMEOUT, "the sound line", () -> !engine.sinks.isEmpty());
+            await(TIMEOUT, "half of 80%", () -> engine.sinks.getFirst().gain() == 0.4f);
+
+            // The slider moves: the player follows, and its own volume is untouched.
+            engine.client.run(() -> engine.registry.setMasterVolume(1));
+            await(TIMEOUT, "the full 80%", () -> engine.sinks.getFirst().gain() == 0.8f);
+            assertThat(engine.client.call(playback::volume)).isEqualTo(0.8f);
+
+            engine.client.run(() -> engine.registry.setMasterVolume(0.25f));
+            engine.client.run(() -> playback.setVolume(1));
+            await(TIMEOUT, "a quarter", () -> engine.sinks.getFirst().gain() == 0.25f);
+            engine.client.run(playback::close);
+        }
+    }
+
+    @Test
     void aMissingFileFailsWithItsCause() {
         try (var engine = TestEngine.create()) {
             var log = new StateLog();

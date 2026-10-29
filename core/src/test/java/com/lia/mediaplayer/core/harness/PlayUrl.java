@@ -136,6 +136,11 @@ public final class PlayUrl {
             public void openInBrowser(String link) {
                 say("open in browser: " + link);
             }
+
+            @Override
+            public float masterVolume() {
+                return 1;
+            }
         };
 
         try (var core = new MediaPlayerCore(platform, CoreOptions.defaults())) {

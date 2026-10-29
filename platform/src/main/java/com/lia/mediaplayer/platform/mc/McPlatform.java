@@ -9,6 +9,7 @@ import java.net.URISyntaxException;
 import java.nio.file.Path;
 import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
+import net.minecraft.sounds.SoundSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -73,6 +74,11 @@ public final class McPlatform implements Platform {
     @Override
     public Clipboard clipboard() {
         return clipboard;
+    }
+
+    @Override
+    public float masterVolume() {
+        return Minecraft.getInstance().options.getSoundSourceVolume(SoundSource.MASTER);
     }
 
     @Override

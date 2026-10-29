@@ -82,6 +82,39 @@ class MediaPlayerUiTest {
     }
 
     @Test
+    void theNextWindowOfAKindStartsAtTheVolumeTheLastWasLeftAt() {
+        ui.showCommand().run("audio", CLIP);
+        var first = (AudioBar) ui.windows().windows().getFirst();
+        first.control().setVolume(0.3f);
+        ui.tick();
+        assertThat(core.windowStates().get(AudioBar.KIND).volume()).isEqualTo(0.3f);
+        first.close();
+
+        ui.showCommand().run("audio", CLIP);
+        assertThat(((AudioBar) ui.windows().windows().getFirst()).control().volume())
+                .isEqualTo(0.3f);
+        // Videos keep their own.
+        ui.showCommand().run("video", CLIP);
+        assertThat(ui.windows()
+                        .frontMost(VideoWindow.class)
+                        .orElseThrow()
+                        .control()
+                        .volume())
+                .isEqualTo(1f);
+    }
+
+    @Test
+    void everyPlaybackFollowsTheGamesMasterVolume() {
+        ui.showCommand().run("audio", CLIP);
+        ((FakePlatform) core.platform()).setMasterVolume(0.5f);
+        ui.tick();
+        assertThat(core.playbacks().masterVolume()).isEqualTo(0.5f);
+        // The player's own volume, the one its bar shows and keeps, is untouched.
+        var bar = (AudioBar) ui.windows().windows().getFirst();
+        assertThat(bar.control().volume()).isEqualTo(1f);
+    }
+
+    @Test
     void windowsAreLiveOverTheChatAndPictureOnlyElsewhere() {
         ui.showCommand().run("video", CLIP);
         renderOver(CHAT, -1, -1);

@@ -21,23 +21,28 @@ import java.util.Optional;
 import java.util.function.Function;
 
 /**
- * What plays next, under a player's controls: a header with the count, then one row per waiting
- * track with its title (looked up once its row shows) and a button that drops it. A double
- * click plays a track now; dragging one moves it in the queue.
+ * What plays next, beside a video's picture or under the audio bar's controls: a header with the
+ * count, then one row per waiting track with its title (looked up once its row shows) and a
+ * button that drops it. A double click plays a track now; dragging one moves it in the queue.
  */
 final class QueuePanel extends Column {
 
     static final int ROW_HEIGHT = 12;
     static final int VISIBLE_ROWS = 5;
     static final int HEIGHT = 11 + ROW_HEIGHT * VISIBLE_ROWS;
+    /** The width it takes beside a picture, where it is as tall as the picture and controls. */
+    static final int WIDTH = 120;
 
     private final PlaybackControl control;
+    private final boolean beside;
     private final Label header;
     private final ListView<MediaRef> list;
     private int shownVersion = -1;
 
-    QueuePanel(PlaybackControl control, Function<String, Optional<String>> titles) {
+    /** @param beside whether it sits to the right of the player rather than under it */
+    QueuePanel(PlaybackControl control, Function<String, Optional<String>> titles, boolean beside) {
         this.control = control;
+        this.beside = beside;
         padding(0, 0);
         header = add(new Label(Text.literal(""), Role.TEXT_SUBTLE), 0, true);
         list = add(
@@ -70,14 +75,20 @@ final class QueuePanel extends Column {
 
     @Override
     public Size measure(Constraints constraints) {
-        return new Size(super.measure(constraints).width(), HEIGHT);
+        Size size = super.measure(constraints);
+        return beside ? new Size(WIDTH, size.height()) : new Size(size.width(), HEIGHT);
     }
 
     @Override
     public void render(Canvas canvas, RenderContext ctx) {
         canvas.fill(bounds(), ctx.color(Role.PANEL_BG));
         Rect b = bounds();
-        canvas.fill(b.x(), b.y(), b.right(), b.y() + 1, ctx.color(Role.BORDER));
+        // The border on the edge it shares with the player.
+        if (beside) {
+            canvas.fill(b.x(), b.y(), b.x() + 1, b.bottom(), ctx.color(Role.BORDER));
+        } else {
+            canvas.fill(b.x(), b.y(), b.right(), b.y() + 1, ctx.color(Role.BORDER));
+        }
         super.render(canvas, ctx);
     }
 

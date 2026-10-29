@@ -233,7 +233,7 @@ public final class WindowManager {
 
     private boolean coveredAbove(int index, double x, double y) {
         for (int i = index + 1; i < windows.size(); i++) {
-            if (!windows.get(i).isHidden() && windows.get(i).frame().contains(x, y)) {
+            if (!windows.get(i).isHidden() && windows.get(i).reaches(x, y)) {
                 return true;
             }
         }
@@ -243,7 +243,7 @@ public final class WindowManager {
     private @Nullable Window windowAt(double x, double y) {
         for (int i = windows.size() - 1; i >= 0; i--) {
             Window window = windows.get(i);
-            if (!window.isHidden() && window.frame().contains(x, y)) {
+            if (!window.isHidden() && window.reaches(x, y)) {
                 return window;
             }
         }

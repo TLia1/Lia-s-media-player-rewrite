@@ -1,6 +1,7 @@
 package com.lia.mediaplayer.ui.windows;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 
 import com.lia.mediaplayer.api.media.MediaKind;
 import com.lia.mediaplayer.api.media.RepeatMode;
@@ -56,7 +57,7 @@ class VideoWindowTest {
         windows.input(new InputEvent.PointerUp(b.centerX(), b.centerY(), 0, Mods.NONE));
     }
 
-    /** The transport's controls in M2's order: play, next, time, seek, mute, volume, loop, shuffle. */
+    /** The transport's controls in M2's order, less the volume slider: play, next, time, seek, mute, loop, shuffle. */
     private Widget transportChild(int index) {
         // Previous sits right after play since M4, and the queue switch comes last.
         return transport().children().get(index == 0 ? 0 : index + 1);
@@ -148,6 +149,8 @@ class VideoWindowTest {
 
     @Test
     void showsASpinnerOnlyAfterALoadHasTakenAWhile() {
+        // Wide enough for the live label, which the test font spells out as its key.
+        window.setFrame(window.frame().withSize(480, window.frame().height()));
         playback.snapshot = FakePlayback.at(new PlayerState.Playing(Duration.ZERO), Duration.ZERO, null);
         render(-1, -1, 500_000_000L);
         playback.snapshot = FakePlayback.at(new PlayerState.Buffering(Duration.ZERO), Duration.ZERO, null);
@@ -204,16 +207,9 @@ class VideoWindowTest {
         click(transportChild(4));
         assertThat(playback.volume).isEqualTo(1f);
 
-        Rect volume = transportChild(5).bounds();
-        windows.input(new InputEvent.PointerDown(volume.x(), volume.centerY(), 0, Mods.NONE, 1));
-        windows.input(new InputEvent.PointerUp(volume.x(), volume.centerY(), 0, Mods.NONE));
-        assertThat(playback.volume).isZero();
-        click(transportChild(4));
-        assertThat(playback.volume).isEqualTo(1f);
-
-        click(transportChild(6));
+        click(transportChild(5));
         assertThat(playback.repeat).isEqualTo(RepeatMode.ALL);
-        click(transportChild(7));
+        click(transportChild(6));
         assertThat(playback.shuffle).isTrue();
 
         playback.queued = 3;
@@ -228,14 +224,55 @@ class VideoWindowTest {
         assertThat(tooltipOver(transportChild(0))).contains("gui.liasmediaplayer.tooltip.play");
         assertThat(tooltipOver(transportChild(1))).contains("gui.liasmediaplayer.tooltip.next");
         assertThat(tooltipOver(transportChild(4))).contains("gui.liasmediaplayer.tooltip.mute");
-        assertThat(tooltipOver(transportChild(5))).contains("gui.liasmediaplayer.tooltip.volume[100]");
-        assertThat(tooltipOver(transportChild(6))).contains("gui.liasmediaplayer.tooltip.loop.off");
-        assertThat(tooltipOver(transportChild(7))).contains("gui.liasmediaplayer.tooltip.shuffle.off");
+        assertThat(tooltipOver(transportChild(5))).contains("gui.liasmediaplayer.tooltip.loop.off");
+        assertThat(tooltipOver(transportChild(6))).contains("gui.liasmediaplayer.tooltip.shuffle.off");
         Rect seek = transportChild(3).bounds();
         render(seek.x(), seek.centerY(), 0);
         assertThat(canvas.tooltip())
                 .hasValueSatisfying(t -> assertThat(t.lines()).containsExactly("0:00"));
         assertThat(canvas.drewText("0:00 / 2:00:00")).isTrue();
+    }
+
+    @Test
+    void hoveringTheSpeakerRaisesTheVolumeBarOverThePicture() {
+        Rect speaker = transportChild(4).bounds();
+        VolumePopup popup = transport().volumePopup();
+        assertThat(popup.isVisible()).isFalse();
+
+        render(speaker.centerX(), speaker.centerY(), 0);
+        assertThat(popup.isVisible()).isTrue();
+        Rect bar = popup.bounds();
+        assertThat(bar.bottom()).as("standing on the speaker").isEqualTo(speaker.y());
+        assertThat(view().bounds().contains(bar.centerX(), bar.y()))
+                .as("over the picture")
+                .isTrue();
+
+        // Up onto the bar it stays open and explains itself; a press near its foot nearly silences.
+        render(bar.centerX(), bar.centerY(), 0);
+        assertThat(popup.isVisible()).isTrue();
+        assertThat(canvas.tooltip().map(t -> t.lines().getFirst())).contains("gui.liasmediaplayer.tooltip.volume[100]");
+        int foot = bar.bottom() - VolumePopup.PADDING - 1;
+        windows.input(new InputEvent.PointerDown(bar.centerX(), foot, 0, Mods.NONE, 1));
+        assertThat(playback.volume).isCloseTo(1f / VolumePopup.BAR_HEIGHT, within(0.001f));
+        assertThat(playback.calls).doesNotContain("togglePause");
+
+        // Dragging past the top fills it, and the bar stays while the drag goes on.
+        windows.input(new InputEvent.PointerDrag(bar.centerX(), bar.y() - 30, 0, 0, -30, Mods.NONE));
+        render(bar.centerX(), bar.y() - 30, 0);
+        assertThat(popup.isVisible()).isTrue();
+        assertThat(playback.volume).isEqualTo(1f);
+        windows.input(new InputEvent.PointerUp(bar.centerX(), bar.y() - 30, 0, Mods.NONE));
+
+        // The wheel steps it, on the bar or on the speaker.
+        render(bar.centerX(), bar.centerY(), 0);
+        windows.input(new InputEvent.Scroll(bar.centerX(), bar.centerY(), -1, Mods.NONE));
+        assertThat(playback.volume).isCloseTo(0.95f, within(0.001f));
+        windows.input(new InputEvent.Scroll(speaker.centerX(), speaker.centerY(), -1, Mods.NONE));
+        assertThat(playback.volume).isCloseTo(0.9f, within(0.001f));
+
+        // Away from both, it folds back.
+        render(-1, -1, 0);
+        assertThat(popup.isVisible()).isFalse();
     }
 
     private Optional<String> tooltipOver(Widget widget) {
@@ -299,19 +336,28 @@ class VideoWindowTest {
     }
 
     @Test
-    void theQueueOpensUnderTheControlsAndEditsTheQueue() {
+    void theQueueOpensBesideThePictureAndEditsTheQueue() {
         playback.upcoming.add(
                 new MediaRef("https://example.com/a.mp4", MediaKind.VIDEO, "test:video", Text.literal("v")));
         playback.upcoming.add(
                 new MediaRef("https://example.com/b.mp4", MediaKind.VIDEO, "test:video", Text.literal("v")));
         playback.queueVersion++;
-        int height = window.frame().height();
+        Rect before = window.frame();
         click(transport().children().getLast());
         assertThat(window.isQueueOpen()).isTrue();
-        assertThat(window.frame().height()).isEqualTo(height + QueuePanel.HEIGHT);
+        assertThat(window.frame().width()).isEqualTo(before.width() + QueuePanel.WIDTH);
+        assertThat(window.frame().height()).isEqualTo(before.height());
         render(-1, -1, 0);
-        assertThat(canvas.drewText("example.com/a.mp4")).isTrue();
-        assertThat(canvas.drewText("gui.liasmediaplayer.queue.header[2]")).isTrue();
+        assertThat(window.frame().right()).isLessThanOrEqualTo(640);
+        Rect queue = window.queue().bounds();
+        assertThat(queue.x()).isGreaterThanOrEqualTo(view().bounds().right());
+        assertThat(queue.x()).isGreaterThanOrEqualTo(transport().bounds().right());
+        assertThat(queue.width()).isEqualTo(QueuePanel.WIDTH);
+        assertThat(view().bounds().width()).isEqualTo(before.width() - 2);
+        // The queue is narrow and the test font spells keys out, so both are cut short.
+        assertThat(canvas.drewText("example.c")).isTrue();
+        assertThat(canvas.drewText("gui.liasmediaplayer")).isTrue();
+        assertThat(window.queue().list().items()).hasSize(2);
 
         var list = window.queue().list();
         Rect first =
@@ -321,7 +367,35 @@ class VideoWindowTest {
         assertThat(playback.calls).contains("jumpTo 0");
 
         window.setQueueOpen(false);
-        assertThat(window.frame().height()).isEqualTo(height);
+        assertThat(window.frame().width()).isEqualTo(before.width());
+        assertThat(window.frame().height()).isEqualTo(before.height());
+    }
+
+    @Test
+    void aNarrowTransportHidesControlsInsteadOfSpillingOut() {
+        playback.snapshot =
+                FakePlayback.at(new PlayerState.Playing(Duration.ZERO), Duration.ZERO, Duration.ofMinutes(1));
+        window.setFrame(window.frame()
+                .withSize(window.minimumSize().width(), window.frame().height()));
+        render(-1, -1, 0);
+        render(-1, -1, 0);
+        Rect bar = transport().bounds();
+        for (Widget control : transport().children()) {
+            if (control.isVisible()) {
+                assertThat(control.bounds().right()).as("inside the bar").isLessThanOrEqualTo(bar.right());
+            }
+        }
+        // Shuffle goes first, then loop; play, next, seek, mute and the queue switch always stay.
+        assertThat(transportChild(6).isVisible()).isFalse();
+        assertThat(transportChild(5).isVisible()).isFalse();
+        for (int index : new int[] {0, 1, 3, 4}) {
+            assertThat(transportChild(index).isVisible()).isTrue();
+        }
+        assertThat(transport().children().getLast().isVisible()).isTrue();
+
+        window.setFrame(window.frame().withSize(400, window.frame().height()));
+        render(-1, -1, 0);
+        assertThat(transport().children()).allMatch(Widget::isVisible);
     }
 
     @Test

@@ -28,6 +28,7 @@ public final class PlaybackRegistry implements AutoCloseable {
     private final List<Playback> playbacks = new ArrayList<>();
     private final AtomicLong ids = new AtomicLong();
     private final List<BiConsumer<Playback, MediaRef>> trackListeners = new CopyOnWriteArrayList<>();
+    private float masterVolume = 1;
 
     public PlaybackRegistry(
             PlaybackEngine engine, CollectionExpander collections, ClientThread clientThread, RandomGenerator random) {
@@ -45,6 +46,7 @@ public final class PlaybackRegistry implements AutoCloseable {
         clientThread.checkCurrent();
         var playback =
                 new Playback(ids.incrementAndGet(), engine, options, random, playbacks::remove, this::trackStarted);
+        playback.setMasterVolume(masterVolume);
         playbacks.add(playback);
         if (ref.kind() == MediaKind.COLLECTION) {
             enqueue(playback, ref);
@@ -100,6 +102,26 @@ public final class PlaybackRegistry implements AutoCloseable {
                 LOGGER.error("Track listener failed on {}", ref.url(), e);
             }
         }
+    }
+
+    /**
+     * The game's master volume, linear, 0 to 1, which scales every playback's own volume. Read
+     * from the game once a tick; only a change reaches the players.
+     */
+    public void setMasterVolume(float volume) {
+        clientThread.checkCurrent();
+        float clamped = Float.isNaN(volume) ? 1 : Math.max(0, Math.min(1, volume));
+        if (clamped == masterVolume) {
+            return;
+        }
+        masterVolume = clamped;
+        for (Playback playback : playbacks) {
+            playback.setMasterVolume(clamped);
+        }
+    }
+
+    public float masterVolume() {
+        return masterVolume;
     }
 
     public List<Playback> playbacks() {

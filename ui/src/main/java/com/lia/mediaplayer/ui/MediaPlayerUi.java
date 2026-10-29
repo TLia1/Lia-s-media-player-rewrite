@@ -159,10 +159,11 @@ public final class MediaPlayerUi implements ClientEvents {
     }
 
     private PlayerWindow openPlayer(MediaRef ref, boolean sound) {
-        var playback = core.playbacks().open(ref, core.playerOptions(sound));
+        // The first track already starts at the volume the last window of its kind was left at.
+        WindowState remembered = core.windowStates().get(sound ? AudioBar.KIND : VideoWindow.KIND);
+        var playback = core.playbacks().open(ref, core.playerOptions(sound).withVolume(remembered.volume()));
         var control = new CorePlaybackControl(playback, core.playbacks());
         Window window = sound ? new AudioBar(control, services) : new VideoWindow(control, services);
-        WindowState remembered = core.windowStates().get(window.kind());
         control.setRepeat(remembered.repeat());
         control.setShuffle(remembered.shuffle());
         ((PlayerWindow) window).setQueueOpen(remembered.queueOpen());
@@ -330,12 +331,13 @@ public final class MediaPlayerUi implements ClientEvents {
         core.platform().clientThread().checkCurrent();
         ticks++;
         core.images().tick();
+        core.playbacks().setMasterVolume(core.platform().masterVolume());
         windows.tick();
         rememberModes();
         announceHiddenTracks();
     }
 
-    /** Keeps the loop, shuffle and queue of the front window of each kind for the next one. */
+    /** Keeps the loop, shuffle, queue and volume of the front window of each kind for the next one. */
     private void rememberModes() {
         for (Class<? extends Window> type : List.of(VideoWindow.class, AudioBar.class)) {
             windows.frontMost(type).ifPresent(window -> {
@@ -345,7 +347,8 @@ public final class MediaPlayerUi implements ClientEvents {
                         .put(
                                 window.kind(),
                                 state.withModes(control.repeat(), control.shuffle())
-                                        .withQueueOpen(((PlayerWindow) window).isQueueOpen()));
+                                        .withQueueOpen(((PlayerWindow) window).isQueueOpen())
+                                        .withVolume(control.volume()));
             });
         }
     }
