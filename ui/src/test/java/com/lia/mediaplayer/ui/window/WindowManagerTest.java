@@ -16,6 +16,9 @@ import com.lia.mediaplayer.ui.widget.IconButton;
 import com.lia.mediaplayer.ui.widget.RenderContext;
 import com.lia.mediaplayer.ui.widget.Size;
 import com.lia.mediaplayer.ui.widget.Spacer;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 class WindowManagerTest {
@@ -218,5 +221,80 @@ class WindowManagerTest {
         assertThat(windows.input(new InputEvent.KeyDown(Key.SPACE, Mods.NONE))).isFalse();
         assertThat(windows.input(new InputEvent.CharTyped('a'))).isFalse();
         windows.cancelGestures();
+    }
+
+    @Test
+    void hiddenWindowsAreNeitherDrawnNorClickedButStayOpen() {
+        var first = windows.open(new TestWindow("one"));
+        var second = windows.open(new TestWindow("two"));
+        render(-1, -1, 0);
+        second.hide();
+        render(-1, -1, 0);
+        assertThat(canvas.strings()).containsExactly("one");
+        assertThat(windows.focused()).contains(first);
+        assertThat(windows.hiddenCount()).isEqualTo(1);
+        assertThat(windows.allHidden()).isFalse();
+        Rect f = second.frame();
+        assertThat(windows.covers(f.x() + 50, f.y() + 30))
+                .isEqualTo(first.frame().contains(f.x() + 50, f.y() + 30));
+
+        windows.toggleHidden();
+        assertThat(windows.allHidden()).isTrue();
+        assertThat(windows.focused()).isEmpty();
+        windows.renderHud(canvas.clear(), new RenderContext(Themes.DARK, 0, Double.NaN, Double.NaN, false));
+        assertThat(canvas.strings()).isEmpty();
+        windows.toggleHidden();
+        assertThat(windows.hiddenCount()).isZero();
+        assertThat(second.isClosed()).isFalse();
+    }
+
+    @Test
+    void aWindowOpensWhereTheLastOfItsKindWasLeft() {
+        var remembered = new HashMap<String, Rect>();
+        var memory = new WindowMemory() {
+            @Override
+            public Optional<Rect> frame(String kind) {
+                return Optional.ofNullable(remembered.get(kind));
+            }
+
+            @Override
+            public void remember(String kind, Rect frame) {
+                remembered.put(kind, frame);
+            }
+        };
+        var managed = new WindowManager(memory, () -> Corner.BOTTOM_LEFT);
+        var first = managed.open(new TestWindow("one"));
+        managed.render(canvas.clear(), new RenderContext(Themes.DARK, 0, -1, -1, true));
+        assertThat(first.frame()).isEqualTo(new Rect(Placement.MARGIN, 300 - Placement.MARGIN - 60, 100, 60));
+
+        // Dragged by its title strip, then let go: remembered.
+        Rect f = first.frame();
+        managed.input(down(f.x() + 50, f.y() + 5));
+        managed.input(new InputEvent.PointerDrag(f.x() + 150, f.y() - 95, 0, 0, 0, Mods.shiftOnly()));
+        managed.input(up(f.x() + 150, f.y() - 95));
+        assertThat(remembered.get("test")).isEqualTo(first.frame());
+        first.close();
+
+        var second = managed.open(new TestWindow("two"));
+        managed.render(canvas.clear(), new RenderContext(Themes.DARK, 0, -1, -1, true));
+        assertThat(second.frame()).isEqualTo(remembered.get("test"));
+        var third = managed.open(new TestWindow("three"));
+        managed.render(canvas.clear(), new RenderContext(Themes.DARK, 0, -1, -1, true));
+        assertThat(third.frame()).isNotEqualTo(second.frame());
+    }
+
+    @Test
+    void cornersPlaceAndCascadeTowardsTheMiddle() {
+        var screen = new Rect(0, 0, 400, 300);
+        var size = new Size(100, 60);
+        int m = Placement.MARGIN;
+        assertThat(Placement.initial(screen, size, List.of(), Corner.TOP_LEFT)).isEqualTo(new Rect(m, m, 100, 60));
+        assertThat(Placement.initial(screen, size, List.of(), Corner.BOTTOM_RIGHT))
+                .isEqualTo(new Rect(400 - m - 100, 300 - m - 60, 100, 60));
+        assertThat(Placement.initial(screen, size, List.of(), Corner.CENTER)).isEqualTo(new Rect(150, 120, 100, 60));
+        Rect first = Placement.initial(screen, size, List.of(), Corner.BOTTOM_LEFT);
+        Rect second = Placement.initial(screen, size, List.of(first), Corner.BOTTOM_LEFT);
+        assertThat(second.x()).isGreaterThan(first.x());
+        assertThat(second.y()).isLessThan(first.y());
     }
 }

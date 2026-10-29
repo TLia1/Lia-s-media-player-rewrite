@@ -4,15 +4,24 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.lia.mediaplayer.api.settings.EnumSetting;
+import com.lia.mediaplayer.api.settings.IntSetting;
+import com.lia.mediaplayer.api.settings.SettingSpec;
 import com.lia.mediaplayer.api.text.Text;
 import com.lia.mediaplayer.core.diag.PlaybackError;
 import com.lia.mediaplayer.core.link.BuiltinSources;
+import com.lia.mediaplayer.core.settings.CoreSettings;
+import com.lia.mediaplayer.core.settings.Settings;
 import com.lia.mediaplayer.core.text.Keys;
+import com.lia.mediaplayer.ui.settings.UiSettings;
+import com.lia.mediaplayer.ui.theme.Theme;
+import com.lia.mediaplayer.ui.theme.ThemeRegistry;
 import com.lia.mediaplayer.ui.theme.Themes;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -37,8 +46,37 @@ class LanguageFilesTest {
             keys.add(cause.messageKey());
             keys.add(cause.hintKey());
         }
-        keys.add(((Text.Translatable) Themes.DARK.name()).key());
+        for (Theme theme : Themes.all()) {
+            keys.add(key(theme.name()));
+        }
+        for (Hotkey hotkey : Hotkey.values()) {
+            keys.add(hotkey.translationKey());
+        }
+        var specs = new ArrayList<SettingSpec<?>>(CoreSettings.all());
+        specs.addAll(UiSettings.all(UiSettings.theme(new ThemeRegistry())));
+        for (SettingSpec<?> spec : specs) {
+            keys.add(key(spec.label()));
+            spec.description().ifPresent(text -> keys.add(key(text)));
+            spec.warning().ifPresent(text -> keys.add(key(text)));
+            keys.add(Settings.groupKey(spec.group()));
+            if (spec instanceof EnumSetting<?> choice) {
+                choice.values().forEach(value -> keys.add(name(choice, value)));
+            }
+            if (spec instanceof IntSetting integer) {
+                integer.format().ifPresent(keys::add);
+            }
+        }
         return keys;
+    }
+
+    private static String key(Text text) {
+        return ((Text.Translatable) text).key();
+    }
+
+    @SuppressWarnings("unchecked") // the values come from the setting itself
+    private static <E extends Enum<E>> String name(EnumSetting<E> spec, Object value) {
+        Text text = spec.names().apply((E) value);
+        return text instanceof Text.Translatable translatable ? translatable.key() : Keys.DONE;
     }
 
     private static Map<String, String> load(String language) throws IOException {

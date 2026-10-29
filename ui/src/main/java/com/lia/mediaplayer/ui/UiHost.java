@@ -9,10 +9,13 @@ import java.util.Optional;
  */
 public interface UiHost {
 
-    /** Opens {@code screen} in place of whatever screen is open. */
+    /** Opens {@code screen} in place of whatever screen is open; closing it goes back to the game. */
     void openScreen(UiScreen screen);
 
-    /** Closes the screen that is open, if it is one of the mod's. */
+    /** Opens {@code screen} over the screen open now, which closing it goes back to. */
+    void openScreenOver(UiScreen screen);
+
+    /** Closes the screen that is open, if it is one of the mod's, back to what it was opened over. */
     void closeScreen();
 
     /** The mod's screen that is open, if the open screen is one. */

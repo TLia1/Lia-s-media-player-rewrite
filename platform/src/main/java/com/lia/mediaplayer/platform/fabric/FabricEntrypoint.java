@@ -2,6 +2,7 @@ package com.lia.mediaplayer.platform.fabric;
 
 import com.lia.mediaplayer.platform.mc.McPlatform;
 import com.lia.mediaplayer.platform.mc.ModBootstrap;
+import java.util.Optional;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
@@ -13,7 +14,9 @@ import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenKeyboardEvents;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenMouseEvents;
+import net.fabricmc.fabric.api.client.screen.v1.Screens;
 import net.fabricmc.loader.api.FabricLoader;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Fabric's way in: builds the mod and forwards Fabric API events to it. No decisions here:
@@ -24,6 +27,14 @@ import net.fabricmc.loader.api.FabricLoader;
  */
 public final class FabricEntrypoint implements ClientModInitializer {
 
+    /** The running mod, for the mod menu's settings button; the only static besides constants. */
+    private static @Nullable ModBootstrap running;
+
+    /** The running mod, once Fabric has started it. */
+    static Optional<ModBootstrap> running() {
+        return Optional.ofNullable(running);
+    }
+
     @Override
     public void onInitializeClient() {
         var loader = FabricLoader.getInstance();
@@ -31,6 +42,7 @@ public final class FabricEntrypoint implements ClientModInitializer {
                 .map(mod -> mod.getMetadata().getVersion().getFriendlyString())
                 .orElse("unknown");
         var mod = ModBootstrap.start(new McPlatform("Fabric", minecraftVersion, loader.getGameDir()));
+        running = mod;
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> mod.tick());
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> mod.worldLeft());
@@ -40,7 +52,7 @@ public final class FabricEntrypoint implements ClientModInitializer {
         HudRenderCallback.EVENT.register((graphics, tickCounter) -> mod.renderHud(graphics));
 
         ScreenEvents.AFTER_INIT.register((client, screen, width, height) -> {
-            mod.screenOpened(screen);
+            mod.screenOpened(screen, widget -> Screens.getButtons(screen).add(widget));
             ScreenEvents.afterRender(screen)
                     .register((s, graphics, mouseX, mouseY, delta) -> mod.renderScreen(s, graphics, mouseX, mouseY));
             ScreenMouseEvents.allowMouseClick(screen)

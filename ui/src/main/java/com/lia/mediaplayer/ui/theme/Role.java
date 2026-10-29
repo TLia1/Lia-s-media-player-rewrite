@@ -15,6 +15,22 @@ public enum Role {
     PLACEHOLDER,
     /** A small panel over the picture: the error card, the volume read-out. */
     PANEL_BG,
+    /** Behind a screen's lists and panels. */
+    LIST_BG,
+    /** A row of a list at rest. */
+    ROW_BG,
+    /** A row under the cursor. */
+    ROW_HOVER,
+    /** The chosen row: the selected playlist, the track playing. */
+    ROW_SELECTED,
+    /** Inside a text field. */
+    FIELD_BG,
+    /** A small button over the chat ("Playlists"). */
+    CHIP_BG,
+    /** The same button under the cursor. */
+    CHIP_HOVER,
+    /** The "now playing" banner. */
+    BANNER_BG,
     /** The edge of a window that is not the front one. */
     BORDER,
     /** The edge of the front window, distinct at a glance from {@link #BORDER}. */
@@ -25,9 +41,15 @@ public enum Role {
     FILL,
     /** The handle on a seek or volume bar. */
     KNOB,
+    /** The groove of a scroll bar. */
+    SCROLL_TRACK,
+    /** The part of a scroll bar that moves. */
+    SCROLL_THUMB,
     TEXT,
     /** Secondary text: times, counts, hints. */
     TEXT_SUBTLE,
+    /** Text that is barely there: a placeholder in an empty field. */
+    TEXT_DIM,
     /** A control glyph at rest. */
     ICON,
     /** A control glyph under the cursor. */

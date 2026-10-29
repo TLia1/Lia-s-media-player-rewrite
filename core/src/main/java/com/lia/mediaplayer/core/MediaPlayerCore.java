@@ -1,20 +1,29 @@
 package com.lia.mediaplayer.core;
 
+import com.google.gson.JsonElement;
 import com.lia.mediaplayer.api.ApiVersion;
+import com.lia.mediaplayer.api.media.MediaKind;
+import com.lia.mediaplayer.api.source.ResolveOptions;
 import com.lia.mediaplayer.core.event.EventBus;
 import com.lia.mediaplayer.core.ffmpeg.ProbeCache;
 import com.lia.mediaplayer.core.image.ImageCache;
 import com.lia.mediaplayer.core.image.ImageLoader;
+import com.lia.mediaplayer.core.library.Library;
+import com.lia.mediaplayer.core.library.LibraryCodec;
+import com.lia.mediaplayer.core.library.LibraryData;
+import com.lia.mediaplayer.core.library.Titles;
 import com.lia.mediaplayer.core.lifecycle.ClientThread;
 import com.lia.mediaplayer.core.lifecycle.CoreExecutors;
 import com.lia.mediaplayer.core.lifecycle.Disposer;
 import com.lia.mediaplayer.core.link.BuiltinSources;
 import com.lia.mediaplayer.core.link.ChatRewriter;
 import com.lia.mediaplayer.core.link.SourceRegistry;
+import com.lia.mediaplayer.core.migrate.V2Import;
 import com.lia.mediaplayer.core.net.Http;
 import com.lia.mediaplayer.core.platform.Platform;
 import com.lia.mediaplayer.core.playback.PlaybackEngine;
 import com.lia.mediaplayer.core.playback.PlaybackRegistry;
+import com.lia.mediaplayer.core.playback.PlayerOptions;
 import com.lia.mediaplayer.core.playback.PlayerServices;
 import com.lia.mediaplayer.core.resolve.CollectionExpander;
 import com.lia.mediaplayer.core.resolve.DirectResolver;
@@ -23,7 +32,12 @@ import com.lia.mediaplayer.core.resolve.ResolveCache;
 import com.lia.mediaplayer.core.resolve.ResolverChain;
 import com.lia.mediaplayer.core.resolve.TenorResolver;
 import com.lia.mediaplayer.core.resolve.YtDlpResolver;
+import com.lia.mediaplayer.core.settings.CoreSettings;
+import com.lia.mediaplayer.core.settings.SettingsRegistry;
 import com.lia.mediaplayer.core.storage.DataPaths;
+import com.lia.mediaplayer.core.storage.JsonStore;
+import com.lia.mediaplayer.core.storage.WindowState;
+import com.lia.mediaplayer.core.storage.WindowStates;
 import com.lia.mediaplayer.core.tools.ProcessRunner;
 import com.lia.mediaplayer.core.tools.ToolDownloader;
 import com.lia.mediaplayer.core.tools.ToolLocator;
@@ -31,6 +45,7 @@ import com.lia.mediaplayer.core.tools.ToolManager;
 import java.time.Duration;
 import java.time.InstantSource;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.random.RandomGenerator;
 import org.slf4j.Logger;
@@ -41,7 +56,8 @@ import org.slf4j.LoggerFactory;
  * and owns their lifetimes. It holds no logic of its own.
  *
  * <p>Two lifecycles meet here. The <em>game session</em> lasts from construction to
- * {@link #close()}: tools, settings, the library. The <em>world session</em> ends at each
+ * {@link #close()}: tools, settings, the library, which is written to disk one last time
+ * then. The <em>world session</em> ends at each
  * {@link #onWorldLeft()}: players, windows, in-memory caches.
  */
 public final class MediaPlayerCore implements AutoCloseable {
@@ -53,11 +69,16 @@ public final class MediaPlayerCore implements AutoCloseable {
 
     private static final Duration PROBE_TIMEOUT = Duration.ofSeconds(20);
     private static final int RESOLVE_CACHE_ENTRIES = 256;
+    /** How long a store waits for changes to stop before it writes. */
+    private static final Duration WRITE_DEBOUNCE = Duration.ofMillis(500);
 
     private final Platform platform;
     private final DataPaths paths;
     private final Disposer disposer = new Disposer();
     private final EventBus events;
+    private final SettingsRegistry settings;
+    private final Library library;
+    private final WindowStates windowStates;
     private final ToolManager tools;
     private final SourceRegistry sources;
     private final ChatRewriter chat;
@@ -66,6 +87,7 @@ public final class MediaPlayerCore implements AutoCloseable {
     private final PlaybackEngine engine;
     private final PlaybackRegistry playbacks;
     private final ImageCache images;
+    private final Titles titles;
 
     public MediaPlayerCore(Platform platform) {
         this(platform, CoreOptions.defaults());
@@ -88,16 +110,55 @@ public final class MediaPlayerCore implements AutoCloseable {
         var processes = disposer.add(new ProcessRunner(clientThread));
         var http = disposer.add(new Http(clientThread));
 
+        // Before any store reads its file: v2's files become v3's on the first start.
+        var unusedImport = V2Import.runIfNeeded(paths);
+        this.settings = new SettingsRegistry(disposer.add(new JsonStore<Map<String, JsonElement>>(
+                paths.settings(),
+                SettingsRegistry.codec(),
+                1,
+                List.of(),
+                executors.io(),
+                executors.timer(),
+                WRITE_DEBOUNCE)));
+        CoreSettings.all().forEach(settings::register);
+        this.library = new Library(
+                disposer.add(new JsonStore<LibraryData>(
+                        paths.library(),
+                        new LibraryCodec(),
+                        LibraryCodec.SCHEMA,
+                        List.of(),
+                        executors.io(),
+                        executors.timer(),
+                        WRITE_DEBOUNCE)),
+                clock);
+        this.windowStates = new WindowStates(disposer.add(new JsonStore<Map<String, WindowState>>(
+                paths.windows(),
+                WindowStates.codec(),
+                WindowStates.SCHEMA,
+                List.of(),
+                executors.io(),
+                executors.timer(),
+                WRITE_DEBOUNCE)));
+
+        var policy = options.toolPolicy();
         this.tools = new ToolManager(
                 new ToolLocator(options.host(), paths.bin(), processes),
                 new ToolDownloader(http, options.host(), paths.bin(), options.downloads(), processes),
                 events,
                 executors.io(),
-                options.toolPolicy(),
+                new ToolManager.Policy(
+                        policy.download(), policy.updateStaleYtDlp() && settings.get(CoreSettings.AUTO_UPDATE_TOOLS)),
                 ToolManager.systemToday());
 
         this.sources = new SourceRegistry(BuiltinSources.all());
         this.chat = new ChatRewriter(sources);
+        settings.applyAll(
+                List.of(
+                        CoreSettings.LINK_FILTER,
+                        CoreSettings.BLOCKED_HOSTS,
+                        CoreSettings.ALLOWED_HOSTS,
+                        CoreSettings.BLOCKED_SENDERS),
+                () -> chat.setFilter(CoreSettings.linkFilter(settings)));
         String youtubeClients = Objects.requireNonNullElse(
                 options.host().properties().apply("liasmediaplayer.ytdlp.clients"),
                 YtDlpResolver.DEFAULT_YOUTUBE_CLIENTS);
@@ -121,12 +182,17 @@ public final class MediaPlayerCore implements AutoCloseable {
                 System::nanoTime));
         this.playbacks =
                 disposer.add(new PlaybackRegistry(engine, collections, clientThread, RandomGenerator.getDefault()));
+        playbacks.onTrackStarted(
+                (playback, ref) -> library.recordPlay(ref.url(), playback.audioOnly() ? MediaKind.AUDIO : ref.kind()));
 
         this.images = disposer.add(new ImageCache(
                 new ImageLoader(resolver, http, executors.io(), executors.decode()),
                 platform.textures(),
                 clientThread,
                 ImageCache.DEFAULT_MAX_BYTES));
+        var unusedCacheSize =
+                settings.apply(CoreSettings.IMAGE_CACHE_MB, megabytes -> images.setMaxBytes(megabytes * 1024L * 1024L));
+        this.titles = new Titles(sources, resolver, clientThread);
 
         if (options.installTools()) {
             var unused = tools.start();
@@ -143,6 +209,32 @@ public final class MediaPlayerCore implements AutoCloseable {
 
     public EventBus events() {
         return events;
+    }
+
+    /** Every setting, the mod's and the addons'. */
+    public SettingsRegistry settings() {
+        return settings;
+    }
+
+    /** Playlists and history. */
+    public Library library() {
+        return library;
+    }
+
+    /** Where the windows of each kind were left. */
+    public WindowStates windowStates() {
+        return windowStates;
+    }
+
+    /** The titles of links, for lists. */
+    public Titles titles() {
+        return titles;
+    }
+
+    /** How a new player plays, from the settings: sound only, or with a picture no taller than chosen. */
+    public PlayerOptions playerOptions(boolean audioOnly) {
+        return PlayerOptions.DEFAULT.withResolve(
+                new ResolveOptions(settings.get(CoreSettings.MAX_HEIGHT).height(), audioOnly));
     }
 
     public ToolManager tools() {

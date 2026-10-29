@@ -1,7 +1,7 @@
 package com.lia.mediaplayer.ui.windows;
 
+import com.lia.mediaplayer.api.media.MediaKind;
 import com.lia.mediaplayer.api.text.Text;
-import com.lia.mediaplayer.core.platform.Platform;
 import com.lia.mediaplayer.core.platform.TextureRef;
 import com.lia.mediaplayer.core.playback.PlayerSnapshot;
 import com.lia.mediaplayer.core.text.Keys;
@@ -13,17 +13,21 @@ import com.lia.mediaplayer.ui.widget.Column;
 import com.lia.mediaplayer.ui.widget.IconButton;
 import com.lia.mediaplayer.ui.widget.RenderContext;
 import com.lia.mediaplayer.ui.widget.Size;
+import com.lia.mediaplayer.ui.window.Placement;
 import com.lia.mediaplayer.ui.window.Window;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 
 /**
- * A playback with its picture: the title strip with copy-link, open-in-browser and close, the
- * picture, and the transport bar. On the HUD it shows the picture only.
+ * A playback with its picture: the title strip with the heart, copy-link, open-in-browser,
+ * theatre, hide and close; the picture; the transport bar; and, when asked for, the queue under
+ * it. On the HUD it shows the picture only.
  *
  * <p>When the first frame arrives the window takes the picture's shape once, keeping its
- * width, unless it was resized by then; after that the picture is letterboxed.
+ * width, unless it was resized by then; after that the picture is letterboxed. Theatre mode
+ * makes the picture as large as the screen allows, and gives the window back its frame after.
  */
-public final class VideoWindow extends Window {
+public final class VideoWindow extends Window implements PlayerWindow {
 
     public static final String KIND = "video";
 
@@ -33,28 +37,33 @@ public final class VideoWindow extends Window {
     private final PlaybackControl control;
     private final VideoView view;
     private final TransportBar transport;
-    private final IconButton copy;
-    private final IconButton browser;
-    private final IconButton closer;
+    private final QueuePanel queue;
+    private final List<IconButton> titleButtons;
     private boolean shaped;
     private Rect openedAt = Rect.EMPTY;
+    private @Nullable Rect beforeTheater;
 
-    public VideoWindow(PlaybackControl control, Platform platform) {
+    public VideoWindow(PlaybackControl control, WindowServices services) {
         super(Text.literal(""));
         this.control = control;
-        copy = addTitleButton(
-                new IconButton(Glyphs::copy, () -> control.currentUrl().ifPresent(platform.clipboard()::set))
-                        .tooltip(Text.translatable(Keys.COPY_LINK)));
-        browser = addTitleButton(
-                new IconButton(Glyphs::externalLink, () -> control.currentUrl().ifPresent(platform::openInBrowser))
-                        .tooltip(Text.translatable(Keys.OPEN_IN_BROWSER)));
-        closer = addTitleButton(
-                new IconButton(Glyphs::close, this::close).dangerous().tooltip(Text.translatable(Keys.CLOSE)));
+        titleButtons = List.of(
+                addTitleButton(CornerButtons.favorite(control::currentRef, MediaKind.VIDEO, services)),
+                addTitleButton(
+                        CornerButtons.copy(control::currentRef, () -> MediaTime.shown(control.snapshot()), services)),
+                addTitleButton(CornerButtons.browser(control::currentRef, services)),
+                addTitleButton(new IconButton(Glyphs::theater, this::toggleTheater)
+                        .activeWhen(this::inTheater)
+                        .tooltip(Text.translatable(Keys.THEATER))),
+                addTitleButton(CornerButtons.hide(this::hide)),
+                addTitleButton(CornerButtons.close(this::close)));
         var body = setBody(new Column());
-        view = body.add(new VideoView(control, platform.textures()), 1);
-        transport = body.add(new TransportBar(control), 0, true);
+        view = body.add(new VideoView(control, services.platform().textures()), 1);
+        transport = body.add(new TransportBar(control, this::toggleQueue, this::isQueueOpen), 0, true);
+        queue = body.add(new QueuePanel(control, services.titles()), 0, true);
+        queue.setVisible(false);
     }
 
+    @Override
     public PlaybackControl control() {
         return control;
     }
@@ -71,13 +80,82 @@ public final class VideoWindow extends Window {
 
     @Override
     public Size minimumSize() {
-        return new Size(140, chromeHeight() + 40);
+        return new Size(160, chromeHeight() + 40);
     }
 
-    /** Everything that is not picture: the edges, the title strip and the transport bar. */
-    private static int chromeHeight() {
-        return 2 + TITLE_BAR + TransportBar.HEIGHT;
+    /** Everything that is not picture: the edges, the title strip, the transport bar and the queue. */
+    private int chromeHeight() {
+        return 2 + TITLE_BAR + TransportBar.HEIGHT + (isQueueOpen() ? QueuePanel.HEIGHT : 0);
     }
+
+    @Override
+    public boolean isQueueOpen() {
+        return queue.isVisible();
+    }
+
+    @Override
+    public void setQueueOpen(boolean open) {
+        if (open == isQueueOpen()) {
+            return;
+        }
+        queue.setVisible(open);
+        if (isPlaced()) {
+            int change = open ? QueuePanel.HEIGHT : -QueuePanel.HEIGHT;
+            Rect grown = frame().withSize(frame().width(), frame().height() + change);
+            Rect area = screen();
+            setFrame(area.isEmpty() ? grown : grown.clampInto(area));
+        }
+    }
+
+    private void toggleQueue() {
+        setQueueOpen(!isQueueOpen());
+    }
+
+    @Override
+    public void toggleMute() {
+        transport.toggleMute();
+    }
+
+    // ---- Theatre ------------------------------------------------------------
+
+    public boolean inTheater() {
+        return beforeTheater != null;
+    }
+
+    /**
+     * The picture as large as the screen allows, centred; again, the frame from before.
+     *
+     * @return whether anything changed
+     */
+    public boolean toggleTheater() {
+        Rect previous = beforeTheater;
+        if (previous != null) {
+            beforeTheater = null;
+            setFrame(previous);
+            return true;
+        }
+        Rect area = screen().inset(Placement.MARGIN);
+        if (area.isEmpty()) {
+            return false;
+        }
+        beforeTheater = frame();
+        TextureRef picture = view.texture();
+        int aspectWidth = picture == null ? DEFAULT_PICTURE_WIDTH : picture.width();
+        int aspectHeight = picture == null ? DEFAULT_PICTURE_HEIGHT : picture.height();
+        int chrome = chromeHeight();
+        Rect fitted = area.inset(1, 0, 1, chrome).fit(aspectWidth, aspectHeight);
+        Rect frame = new Rect(fitted.x() - 1, fitted.y(), fitted.width() + 2, fitted.height() + chrome);
+        setFrame(frame.clampInto(screen()));
+        raise();
+        return true;
+    }
+
+    @Override
+    protected boolean remembersFrame() {
+        return !inTheater();
+    }
+
+    // ---- Lifecycle ----------------------------------------------------------
 
     @Override
     public void tick() {
@@ -93,6 +171,9 @@ public final class VideoWindow extends Window {
         setTitle(Text.literal(snapshot.title().or(control::currentUrl).orElse("")));
         view.update(snapshot);
         transport.update(snapshot);
+        if (isQueueOpen()) {
+            queue.update();
+        }
     }
 
     @Override
@@ -140,8 +221,12 @@ public final class VideoWindow extends Window {
         return transport;
     }
 
+    QueuePanel queue() {
+        return queue;
+    }
+
     List<IconButton> titleButtons() {
-        return List.of(copy, browser, closer);
+        return titleButtons;
     }
 
     @Override

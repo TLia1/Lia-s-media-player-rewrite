@@ -118,19 +118,19 @@ class MediaPlayerUiTest {
         assertThat(window.frame().y()).isEqualTo(before.y() + 100);
 
         // A new screen lets go of the window.
-        ui.screenOpened(CHAT);
+        ui.screenOpened(CHAT, ButtonSink.NONE);
         renderOver(CHAT, before.x() - 180, before.y() + 105);
         assertThat(window.frame().x()).isEqualTo(before.x() - 100);
     }
 
     @Test
     void theHotkeyOpensAndClosesTheMediaControls() {
-        ui.hotkeyPressed(Hotkey.MEDIA_CONTROLS);
+        ui.hotkeyPressed(Hotkey.MEDIA_CONTROLS, Mods.NONE);
         assertThat(host.currentScreen()).containsInstanceOf(MediaControlsScreen.class);
         ui.showCommand().run("video", CLIP);
         renderOver(HOSTED, -1, -1);
         assertThat(canvas.drewText("127.0.0.1")).isTrue();
-        ui.hotkeyPressed(Hotkey.MEDIA_CONTROLS);
+        ui.hotkeyPressed(Hotkey.MEDIA_CONTROLS, Mods.NONE);
         assertThat(host.currentScreen()).isEmpty();
         renderOver(HOSTED, -1, -1);
         assertThat(canvas.calls()).isEmpty();

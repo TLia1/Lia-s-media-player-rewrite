@@ -48,6 +48,7 @@ public final class ChatOverlay {
     private final SourceRegistry sources;
     private final ImageCache images;
     private final Target target;
+    private boolean preview = true;
 
     public ChatOverlay(UiHost host, ChatRewriter chat, SourceRegistry sources, ImageCache images, Target target) {
         this.host = host;
@@ -55,6 +56,11 @@ public final class ChatOverlay {
         this.sources = sources;
         this.images = images;
         this.target = target;
+    }
+
+    /** Whether hovering a picture label shows the picture (a setting). */
+    public void setPreview(boolean enabled) {
+        preview = enabled;
     }
 
     /** The label under {@code (x, y)}, if it is one the mod made. */
@@ -71,7 +77,7 @@ public final class ChatOverlay {
     public void render(Canvas canvas, RenderContext ctx, Predicate<String> pinned) {
         double px = ctx.pointerX();
         double py = ctx.pointerY();
-        if (Double.isNaN(px)) {
+        if (Double.isNaN(px) || !preview) {
             return;
         }
         Optional<MediaRef> label = labelAt(px, py).filter(ref -> ref.kind() == MediaKind.IMAGE);

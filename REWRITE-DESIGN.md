@@ -369,6 +369,12 @@ M2). Showing a `UiScreen` is the one need that names a `ui` type, so it is not o
 `Platform` but on `ui.UiHost` (open, close, which mod screen is open), which the platform
 implements beside it. M2 has no general `KeyMappingService` yet: the platform registers one
 key mapping per `ui.Hotkey` and reports presses through `ClientEvents.hotkeyPressed`.
+Settled in M4: `Hotkey` lists all twelve of v2's mappings, and a press carries the modifiers
+held (Alt and Shift mean the same for the clipboard key as for a click in chat). `UiHost`
+gained `openScreenOver`, whose screen goes back to the one it was opened over when closed —
+the pause menu for the settings, the playlists for the history — through a parent kept by
+`HostScreen`. Over a hosted screen whose text field has the keyboard, mapped keys are text,
+not hotkeys: `ScreenContext.chatFieldEmpty` is false there too.
 
 `TextureService` is where the deferred-release rule lives:
 
@@ -395,11 +401,10 @@ public interface ClientEvents {
                       double mouseX, double mouseY, Mods mods);  // cursor and modifiers of this frame
     void renderHud(ScreenContext screen, Canvas canvas);         // in-world HUD, under `screen`
     boolean input(ScreenContext screen, InputEvent event);       // true = consumed
-    void screenOpened(ScreenContext screen);                     // a screen was built or rebuilt
-    void hotkeyPressed(Hotkey hotkey);                           // a mod key mapping
+    void screenOpened(ScreenContext screen, ButtonSink buttons); // built or rebuilt; vanilla buttons go in `buttons` (M4)
+    void hotkeyPressed(Hotkey hotkey, Mods mods);                // a mod key mapping, with the modifiers held (M4)
     void worldLeft();
     List<ChatLink> chatDisplayed(List<String> runs, @Nullable String sender);  // M3
-    // M4: a ButtonSink for vanilla buttons on vanilla screens
 }
 ```
 
@@ -571,7 +576,10 @@ public interface LinkSource {
 - Engines never ask "is this YouTube?" through a static predicate. Anything a later
   stage needs (a video id, a timestamp format) travels inside `MediaRef` or comes
   from the `LinkSource` that produced it, through a capability interface such as
-  `TimestampLinks` for "copy at the current time".
+  `TimestampLinks` for "copy at the current time". Settled in M4: `core.link.ShareLinks`
+  decides from `MediaRef.sourceId()` (YouTube `t=`/`start=`, Twitch `1h02m03s`, Vimeo and
+  SoundCloud fragments); the capability interface an addon source implements comes with
+  the API in M5.
 
 ### 6.3 Resolution
 
@@ -944,9 +952,19 @@ public sealed interface InputEvent {
 - `PlaylistScreen`, `HistoryScreen`, `SettingsScreen` and `MediaControlsScreen` are
   `UiScreen`s in `ui`. Addon screens can be `UiScreen`s too, or a vanilla screen the
   addon opens itself.
-- The "Playlists" chat button and the "Media Player Settings" pause-menu button are
-  vanilla buttons added through `ButtonSink` in `screenInitialised`, because they
-  sit inside vanilla screens.
+- The "Media Player Settings" pause-menu button is a vanilla button added through
+  `ButtonSink` in `screenOpened`, because it sits inside a vanilla screen. The same screen
+  opens from Mod Menu's list on Fabric and the mods list on NeoForge
+  (`IConfigScreenFactory`). Settled in M4: the chat's "Playlists" button is drawn by the
+  overlay instead (`ui.overlay.ChatChips`), as in v2, beside a second chip that appears
+  only while windows are hidden and says how many it brings back — a button that comes and
+  goes with every frame is not a vanilla widget's job.
+- Settled in M4: the toolkit grew `TextField` (focus through `InputContext`, which a press
+  elsewhere takes away), `ListView` (a pool of row widgets rebound as they scroll, drag to
+  reorder), `ScrollPane` (takes the wheel while its content does not fit, so a slider passing
+  under the cursor never catches a scroll meant for the page) and `Toggle`. The settings
+  screen is generated from the specs; the playlist and history screens are v2's, rebuilt on
+  them. Deleting a playlist asks for a second click within three seconds.
 
 ### 7.5 Themes
 
@@ -959,7 +977,10 @@ public record Theme(String id, Text name, Map<Role, Integer> colors) {
 - Built-in themes are declared as "dark plus overrides" exactly as in v2, and a
   test checks every role is set in every theme.
 - `ThemeRegistry` holds built-in and addon themes. The active theme is read from a
-  setting through a listener, not polled every tick.
+  setting through a listener, not polled every tick. Settled in M4: the setting is a
+  `ChoiceSetting` whose choices are read from the registry when shown; an id that names
+  no theme (an addon removed since) draws as dark and stays in the file, so the theme
+  comes back with the addon.
 - Widgets receive the theme through `RenderContext`. No colour is a static field.
 
 ### 7.6 Shortcuts
@@ -1022,7 +1043,8 @@ Settled in M3:
   SoundCloud?".
 - **The filter has no screen yet.** `LinkFilter` (mode, host lists, blocked senders) is
   applied to every message; it is set through `ChatRewriter.setFilter` and defaults to
-  allowing everything until the settings of M4 feed it.
+  allowing everything until the settings of M4 feed it. (M4: four settings feed it, through
+  a listener on each.)
 
 ---
 
@@ -1063,6 +1085,24 @@ public final class JsonStore<T> {
   Gson reads and writes records from 2.10; check the version bundled with the oldest
   supported target, and register explicit type adapters if it is older.
 
+Settled in M4:
+
+- **Codecs by hand, not Gson's record support.** Each store has a `JsonStore.Codec` that
+  reads field by field through lenient helpers (`storage.Json`): an entry that cannot be
+  read is skipped, a field of the wrong shape takes its default, and only a file nothing can
+  be made of is set aside. Gson's reflection would fail the whole file on one bad field.
+- **Debounce on a timer thread, write on the IO executor.** `CoreExecutors.timer()` is one
+  daemon thread that only waits; the write it schedules runs on `io()`. The stores are in
+  the `Disposer` after the executors, so they flush first at shutdown.
+- **Playlists carry an id** (`Playlist(String id, String name, List<String> urls)`), so a
+  screen follows one through a rename; names need not be unique.
+- **`windows.json` belongs to `core.storage.WindowStates`**, not to the windows, so the v2
+  import can write it. One `WindowState` per kind: where it was left, its width (and a
+  picture window's height; a player's follows its picture or its controls), its loop and
+  shuffle, and whether its queue was open.
+- **`settings.json` is `{"schema": 1, "values": {id: value}}`**, values in the JSON type of
+  their spec (string lists as arrays). Ids nobody registered are written back untouched.
+
 ### 9.3 Settings
 
 ```java
@@ -1082,6 +1122,14 @@ public sealed interface SettingSpec<T> permits BoolSetting, IntSetting, EnumSett
   nothing polls.
 - The settings screen is generated from the specs: groups on the left, a search
   box, one row per setting with a reset button.
+- Settled in M4: the specs live in `api.settings` already, so M5 only adds the registry an
+  addon reaches them through; the common fields are one `SettingInfo` record. A built-in
+  setting's name gives its id, label key, description key and warning key
+  (`core.settings.Settings`). The engine registers its own (`CoreSettings`: picture height,
+  chat filter, picture memory, yt-dlp updates); the UI registers its own beside them
+  (`UiSettings`: theme, default corner, window caps, hover preview). v2's addon-surface caps,
+  GIF frame cap, frame queue, yt-dlp timeout and hardware decoding have no v3 equivalent
+  yet and are dropped by the import.
 
 ---
 
@@ -1397,7 +1445,11 @@ design depends on that.
   `V2Import` reads `config.json` (option ids mapped to the new namespaced ids),
   `playlists.json` and `history.json` (merged into `library.json`) and
   `windows.json`, then renames the originals to `*.v2.bak`. The `bin/` folder is
-  reused as is.
+  reused as is. Settled in M4 (`core.migrate.V2Import`, with fixture tests): v2's
+  resolution index becomes the nearest height at or below it; comma-separated host and
+  sender lists become arrays; theme names gain the mod's namespace; an addon's option is
+  copied as it was. v2's `windows.json` is told from v3's by its missing `"schema"`, and
+  its content width becomes a window width. A file that cannot be read stays where it is.
 - **Settings that change meaning**: `max_resolution` keeps its value but now also
   applies to YouTube; the frame-queue-capacity setting becomes a buffer length in
   seconds; window caps keep their values.
@@ -1418,7 +1470,7 @@ Each milestone ends with something that runs.
 | M1 | `core` headless engine: tools, `Http`, resolver chain with yt-dlp JSON, ffmpeg session, player actor, `JavaSoundSink`, `PlayQueue` | The CLI harness plays a YouTube link and a direct file with seek and pause; integration tests pass. Prototype decisions settled: PAM framing, in-place resume. |
 | M2 | `ui` toolkit + `Canvas` + `McCanvas`/`McTextures` + `HostScreen`; `VideoWindow`, `AudioBar` | A video plays in a window in game, from the `/show` command. |
 | M3 | Chat: display-time mixin, `ChatRewriter`, labels, hover preview, click routing, filters; images and GIFs; image windows | Every v2 link type works from chat. |
-| M4 | Library and settings: playlists, history, settings screen, themes, window state, keybinds, shortcuts, media controls screen, v2 import | Feature parity with v2 for players. |
+| M4 | Library and settings: playlists, history, settings screen, themes, window state, keybinds, shortcuts, media controls screen, v2 import | Feature parity with v2 for players. Done, short of three things listed in the README. |
 | M5 | API v4, addon entry points on both loaders, an example addon in the repository, API docs and porting guide | The example addon registers a source, a theme and a window button on both loaders. |
 | M6 | Version matrix: add 1.21.11 and the latest 26.x on both loaders (§20, decision 1) | All targets build and pass the smoke test. |
 | M7 | Performance pass with JFR and the debug overlay; disk cache; ffmpeg image fallback; polish | Budget in §12 met on a mid-range machine. |

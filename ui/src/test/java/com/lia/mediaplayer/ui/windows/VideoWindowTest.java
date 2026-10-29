@@ -2,7 +2,10 @@ package com.lia.mediaplayer.ui.windows;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.lia.mediaplayer.api.media.MediaKind;
 import com.lia.mediaplayer.api.media.RepeatMode;
+import com.lia.mediaplayer.api.source.MediaRef;
+import com.lia.mediaplayer.api.text.Text;
 import com.lia.mediaplayer.core.diag.PlaybackError;
 import com.lia.mediaplayer.core.platform.TextureRef;
 import com.lia.mediaplayer.core.playback.PlayerSnapshot;
@@ -19,6 +22,7 @@ import com.lia.mediaplayer.ui.widget.Widget;
 import com.lia.mediaplayer.ui.window.WindowManager;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.HashSet;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -38,7 +42,7 @@ class VideoWindowTest {
     @BeforeEach
     void open() {
         platform = new FakePlatform(gameDir);
-        window = windows.open(new VideoWindow(playback, platform));
+        window = windows.open(new VideoWindow(playback, WindowServices.of(platform)));
         render(-1, -1, 0);
     }
 
@@ -52,8 +56,10 @@ class VideoWindowTest {
         windows.input(new InputEvent.PointerUp(b.centerX(), b.centerY(), 0, Mods.NONE));
     }
 
+    /** The transport's controls in M2's order: play, next, time, seek, mute, volume, loop, shuffle. */
     private Widget transportChild(int index) {
-        return transport().children().get(index);
+        // Previous sits right after play since M4, and the queue switch comes last.
+        return transport().children().get(index == 0 ? 0 : index + 1);
     }
 
     private TransportBar transport() {
@@ -240,15 +246,19 @@ class VideoWindowTest {
 
     @Test
     void theTitleButtonsCopyOpenAndClose() {
+        // The heart, copy, browser, theatre, hide, close.
         var buttons = window.titleButtons();
-        click(buttons.get(0));
-        assertThat(platform.clipboard().get()).isEqualTo(playback.url);
         click(buttons.get(1));
+        assertThat(platform.clipboard().get()).isEqualTo(playback.url);
+        click(buttons.get(2));
         assertThat(platform.openedInBrowser()).containsExactly(playback.url);
+        click(buttons.get(4));
+        assertThat(window.isHidden()).isTrue();
+        window.setHidden(false);
 
         playback.pushFrame(160, 90, (byte) 1);
         render(-1, -1, 0);
-        click(buttons.get(2));
+        click(buttons.get(5));
         assertThat(window.isClosed()).isTrue();
         assertThat(playback.closed).isTrue();
         platform.textures().flushReleases();
@@ -286,5 +296,87 @@ class VideoWindowTest {
         assertThat(MediaTime.seekable(
                         FakePlayback.at(new PlayerState.Resolving(), Duration.ZERO, Duration.ofSeconds(9))))
                 .isFalse();
+    }
+
+    @Test
+    void theQueueOpensUnderTheControlsAndEditsTheQueue() {
+        playback.upcoming.add(
+                new MediaRef("https://example.com/a.mp4", MediaKind.VIDEO, "test:video", Text.literal("v")));
+        playback.upcoming.add(
+                new MediaRef("https://example.com/b.mp4", MediaKind.VIDEO, "test:video", Text.literal("v")));
+        playback.queueVersion++;
+        int height = window.frame().height();
+        click(transport().children().getLast());
+        assertThat(window.isQueueOpen()).isTrue();
+        assertThat(window.frame().height()).isEqualTo(height + QueuePanel.HEIGHT);
+        render(-1, -1, 0);
+        assertThat(canvas.drewText("example.com/a.mp4")).isTrue();
+        assertThat(canvas.drewText("gui.liasmediaplayer.queue.header[2]")).isTrue();
+
+        var list = window.queue().list();
+        Rect first =
+                new Rect(list.bounds().x(), list.bounds().y(), list.bounds().width() - 20, QueuePanel.ROW_HEIGHT);
+        windows.input(new InputEvent.PointerDown(first.x() + 5, first.y() + 3, 0, Mods.NONE, 2));
+        windows.input(new InputEvent.PointerUp(first.x() + 5, first.y() + 3, 0, Mods.NONE));
+        assertThat(playback.calls).contains("jumpTo 0");
+
+        window.setQueueOpen(false);
+        assertThat(window.frame().height()).isEqualTo(height);
+    }
+
+    @Test
+    void theatreFillsTheScreenAndGivesTheFrameBack() {
+        playback.pushFrame(160, 90, (byte) 1);
+        render(-1, -1, 0);
+        Rect before = window.frame();
+        assertThat(window.toggleTheater()).isTrue();
+        assertThat(window.inTheater()).isTrue();
+        assertThat(window.frame().width()).isGreaterThan(before.width());
+        assertThat(window.frame().height()).isLessThanOrEqualTo(360);
+        assertThat(window.toggleTheater()).isTrue();
+        assertThat(window.frame()).isEqualTo(before);
+    }
+
+    @Test
+    void shiftCopiesTheLinkAtTheCurrentTime() {
+        playback.url = "https://www.youtube.com/watch?v=abc";
+        playback.sourceId = "liasmediaplayer:youtube";
+        playback.snapshot = FakePlayback.at(
+                new PlayerState.Playing(Duration.ofSeconds(75)), Duration.ofSeconds(75), Duration.ofMinutes(5));
+        render(-1, -1, 0);
+        Rect copy = window.titleButtons().get(1).bounds();
+        windows.input(new InputEvent.PointerDown(copy.centerX(), copy.centerY(), 0, Mods.shiftOnly(), 1));
+        windows.input(new InputEvent.PointerUp(copy.centerX(), copy.centerY(), 0, Mods.shiftOnly()));
+        assertThat(platform.clipboard().get()).isEqualTo("https://www.youtube.com/watch?v=abc&t=75s");
+    }
+
+    @Test
+    void theHeartKeepsTheLinkInTheFavourites() {
+        var hearts = new HashSet<String>();
+        var favorites = new WindowServices.Favorites() {
+            @Override
+            public boolean isFavorite(String url) {
+                return hearts.contains(url);
+            }
+
+            @Override
+            public void toggle(String url, MediaKind kind) {
+                if (!hearts.remove(url)) {
+                    hearts.add(url);
+                }
+            }
+        };
+        var services = new WindowServices(platform, favorites, url -> Optional.of("Title of " + url));
+        var hearted = windows.open(new VideoWindow(playback, services));
+        render(-1, -1, 0);
+        click(hearted.titleButtons().getFirst());
+        assertThat(hearts).containsExactly(playback.url);
+        assertThat(tooltipOver(hearted.titleButtons().getFirst())).contains("gui.liasmediaplayer.tooltip.unfavorite");
+    }
+
+    @Test
+    void previousAndTheQueueSwitchExplainThemselves() {
+        assertThat(tooltipOver(transport().children().get(1))).contains("gui.liasmediaplayer.tooltip.previous");
+        assertThat(tooltipOver(transport().children().getLast())).contains("gui.liasmediaplayer.queue.show");
     }
 }

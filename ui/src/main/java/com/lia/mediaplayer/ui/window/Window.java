@@ -56,6 +56,7 @@ public abstract class Window extends Container {
     private boolean placed;
     private boolean layoutDirty = true;
     private boolean closed;
+    private boolean hidden;
     private Gesture gesture = Gesture.NONE;
     private double grabX;
     private double grabY;
@@ -89,6 +90,11 @@ public abstract class Window extends Container {
 
     /** What kind of window this is, for placement: windows of a kind cascade together. */
     public abstract String kind();
+
+    /** Whether a frame the player gave this window is worth opening the next one at: not a theatre frame. */
+    protected boolean remembersFrame() {
+        return true;
+    }
 
     /** Called once a client tick while the window is open. */
     public void tick() {}
@@ -238,8 +244,12 @@ public abstract class Window extends Container {
             }
             case InputEvent.PointerUp up -> {
                 if (ctx.isCaptured(this)) {
+                    boolean changed = !bounds().equals(grabFrame);
                     gesture = Gesture.NONE;
                     ctx.releaseCapture();
+                    if (changed) {
+                        remember();
+                    }
                 }
                 yield true;
             }
@@ -315,6 +325,14 @@ public abstract class Window extends Container {
         int ny = (int) Math.round(y - (y - b.y()) * height / (double) b.height());
         Rect zoomed = new Rect(nx, ny, width, height);
         setFrame(screen.isEmpty() ? zoomed : zoomed.clampInto(screen));
+        remember();
+    }
+
+    private void remember() {
+        WindowManager owner = manager;
+        if (owner != null && remembersFrame()) {
+            owner.remembered(this);
+        }
     }
 
     // ---- Lifecycle ----------------------------------------------------------
@@ -339,6 +357,20 @@ public abstract class Window extends Container {
             owner.detach(this);
         }
         onClosed();
+    }
+
+    public final boolean isHidden() {
+        return hidden;
+    }
+
+    /** Hides the window, or shows it again; a hidden window keeps playing. */
+    public final void setHidden(boolean newHidden) {
+        hidden = newHidden;
+    }
+
+    /** Hides it: the corner button. */
+    public final void hide() {
+        setHidden(true);
     }
 
     /** Brings the window to the front. */

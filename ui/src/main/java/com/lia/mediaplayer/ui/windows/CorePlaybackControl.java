@@ -8,6 +8,7 @@ import com.lia.mediaplayer.core.playback.Player;
 import com.lia.mediaplayer.core.playback.PlayerSnapshot;
 import com.lia.mediaplayer.core.video.VideoFrame;
 import java.time.Duration;
+import java.util.List;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 
@@ -28,8 +29,8 @@ public final class CorePlaybackControl implements PlaybackControl {
     }
 
     @Override
-    public Optional<String> currentUrl() {
-        return playback.player().map(player -> player.ref().url());
+    public Optional<MediaRef> currentRef() {
+        return playback.player().map(Player::ref);
     }
 
     @Override
@@ -92,6 +93,46 @@ public final class CorePlaybackControl implements PlaybackControl {
     @Override
     public int queued() {
         return playback.queue().size();
+    }
+
+    @Override
+    public List<MediaRef> upcoming() {
+        return playback.queue().upcoming();
+    }
+
+    @Override
+    public int queueVersion() {
+        return playback.queue().version();
+    }
+
+    @Override
+    public void jumpTo(int index) {
+        playback.jumpTo(index);
+    }
+
+    @Override
+    public void removeQueued(int index) {
+        if (index >= 0 && index < playback.queue().size()) {
+            playback.queue().remove(index);
+        }
+    }
+
+    @Override
+    public void moveQueued(int from, int insertBefore) {
+        int to = insertBefore > from ? insertBefore - 1 : insertBefore;
+        playback.queue().move(from, Math.min(to, playback.queue().size() - 1));
+    }
+
+    @Override
+    public void setRepeat(RepeatMode mode) {
+        playback.queue().setRepeat(mode);
+    }
+
+    @Override
+    public void setShuffle(boolean on) {
+        if (playback.queue().shuffle() != on) {
+            playback.queue().setShuffle(on);
+        }
     }
 
     @Override

@@ -17,10 +17,12 @@ import com.lia.mediaplayer.ui.widget.SeekBar;
 import com.lia.mediaplayer.ui.widget.Size;
 import com.lia.mediaplayer.ui.widget.Slider;
 import java.time.Duration;
+import java.util.function.BooleanSupplier;
 
 /**
  * The controls under a player, shared by the video window and the audio bar: play/pause (or
- * retry after a failure), next, the time, the seek bar, mute and volume, loop and shuffle.
+ * retry after a failure), previous, next, the time, the seek bar, mute and volume, loop,
+ * shuffle and the queue panel's switch.
  *
  * <p>The window hands it a fresh snapshot each frame through {@link #update}; the controls
  * read that, so one frame never shows two different states.
@@ -42,7 +44,7 @@ final class TransportBar extends Row {
     /** The muted cross has a colour of its own, read from the theme of the frame being drawn. */
     private int mutedColor;
 
-    TransportBar(PlaybackControl control) {
+    TransportBar(PlaybackControl control, Runnable toggleQueue, BooleanSupplier queueOpen) {
         this.control = control;
         padding(3, 0).gap(2);
         add(new IconButton(
@@ -56,6 +58,9 @@ final class TransportBar extends Row {
                         this::playOrRetry)
                 .tooltip(() -> Text.translatable(
                         failed() ? Keys.RETRY : MediaTime.running(snapshot) ? Keys.PAUSE : Keys.PLAY)));
+        add(new IconButton(Glyphs::previous, control::previous)
+                .enabledWhen(control::hasPrevious)
+                .tooltip(Text.translatable(Keys.PREVIOUS)));
         add(new IconButton(Glyphs::next, control::next)
                 .enabledWhen(control::hasNext)
                 .tooltip(Text.translatable(Keys.NEXT)));
@@ -89,6 +94,20 @@ final class TransportBar extends Row {
         add(new IconButton(Glyphs::shuffle, control::toggleShuffle)
                 .activeWhen(control::shuffle)
                 .tooltip(() -> Text.translatable(control.shuffle() ? Keys.SHUFFLE_ON : Keys.SHUFFLE_OFF)));
+        add(new IconButton(Glyphs::queue, toggleQueue)
+                .activeWhen(queueOpen)
+                .tooltip(() -> Text.translatable(queueOpen.getAsBoolean() ? Keys.QUEUE_HIDE : Keys.QUEUE_SHOW)));
+    }
+
+    /** Mutes, or brings back the volume from before: the button and the shortcut. */
+    void toggleMute() {
+        float volume = control.volume();
+        if (volume > 0) {
+            unmutedVolume = volume;
+            control.setVolume(0);
+        } else {
+            control.setVolume(unmutedVolume > 0 ? unmutedVolume : 1);
+        }
     }
 
     /** The state to show this frame. Updates the time text when the second it shows changes. */
@@ -144,16 +163,6 @@ final class TransportBar extends Row {
             control.retry();
         } else {
             control.togglePause();
-        }
-    }
-
-    private void toggleMute() {
-        float volume = control.volume();
-        if (volume > 0) {
-            unmutedVolume = volume;
-            control.setVolume(0);
-        } else {
-            control.setVolume(unmutedVolume > 0 ? unmutedVolume : 1);
         }
     }
 

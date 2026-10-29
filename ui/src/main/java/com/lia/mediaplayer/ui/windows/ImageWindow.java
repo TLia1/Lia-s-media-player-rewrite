@@ -1,28 +1,27 @@
 package com.lia.mediaplayer.ui.windows;
 
+import com.lia.mediaplayer.api.media.MediaKind;
 import com.lia.mediaplayer.api.source.MediaRef;
 import com.lia.mediaplayer.api.text.Text;
 import com.lia.mediaplayer.core.image.ImageCache;
 import com.lia.mediaplayer.core.image.ImageTextures;
-import com.lia.mediaplayer.core.platform.Platform;
-import com.lia.mediaplayer.core.text.Keys;
 import com.lia.mediaplayer.ui.canvas.Canvas;
 import com.lia.mediaplayer.ui.canvas.Rect;
-import com.lia.mediaplayer.ui.icon.Glyphs;
 import com.lia.mediaplayer.ui.theme.Role;
-import com.lia.mediaplayer.ui.widget.IconButton;
 import com.lia.mediaplayer.ui.widget.RenderContext;
 import com.lia.mediaplayer.ui.widget.Size;
 import com.lia.mediaplayer.ui.window.Window;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 /**
- * A pinned picture or GIF: the title strip with copy-link, open-in-browser and close, and the
- * picture. There are no controls, so the wheel alone zooms. On the HUD it shows the picture
+ * A pinned picture or GIF: the title strip with the heart, copy-link, open-in-browser, hide and
+ * close, and the picture. There are no controls, so the wheel alone zooms. On the HUD it shows the picture
  * only.
  *
  * <p>Once the picture has loaded the window takes its shape once — at its own size, but no
@@ -42,15 +41,16 @@ public final class ImageWindow extends Window {
     private boolean shaped;
     private Rect openedAt = Rect.EMPTY;
 
-    public ImageWindow(MediaRef ref, ImageCache images, Platform platform) {
+    public ImageWindow(MediaRef ref, ImageCache images, WindowServices services) {
         super(Text.literal(titleOf(ref.url())));
         this.ref = ref;
         this.images = images;
-        addTitleButton(new IconButton(Glyphs::copy, () -> platform.clipboard().set(ref.url()))
-                .tooltip(Text.translatable(Keys.COPY_LINK)));
-        addTitleButton(new IconButton(Glyphs::externalLink, () -> platform.openInBrowser(ref.url()))
-                .tooltip(Text.translatable(Keys.OPEN_IN_BROWSER)));
-        addTitleButton(new IconButton(Glyphs::close, this::close).dangerous().tooltip(Text.translatable(Keys.CLOSE)));
+        Supplier<Optional<MediaRef>> current = () -> Optional.of(ref);
+        addTitleButton(CornerButtons.favorite(current, MediaKind.IMAGE, services));
+        addTitleButton(CornerButtons.copy(current, () -> Duration.ZERO, services));
+        addTitleButton(CornerButtons.browser(current, services));
+        addTitleButton(CornerButtons.hide(this::hide));
+        addTitleButton(CornerButtons.close(this::close));
         view = setBody(new PictureView(() -> images.retry(ref)));
     }
 
@@ -118,8 +118,10 @@ public final class ImageWindow extends Window {
         double scale = Math.min(1, Math.min(screen.width() / 2.0 / w, screen.height() / 2.0 / h));
         int width = Math.max(1, (int) Math.round(w * scale)) + 2;
         int height = Math.max(1, (int) Math.round(h * scale)) + chromeHeight();
-        // New windows sit in the top-right corner: grow from there, leftwards and down.
-        Rect shapedFrame = new Rect(frame().right() - width, frame().y(), width, height);
+        // Grow away from the nearest side of the screen, so a window in a corner stays in it.
+        int x = frame().centerX() > screen.centerX() ? frame().right() - width : frame().x();
+        int y = frame().centerY() > screen.centerY() ? frame().bottom() - height : frame().y();
+        Rect shapedFrame = new Rect(x, y, width, height);
         setFrame(shapedFrame.clampInto(screen));
     }
 

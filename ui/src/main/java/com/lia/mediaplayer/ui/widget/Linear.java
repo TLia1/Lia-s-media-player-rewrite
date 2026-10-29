@@ -1,7 +1,10 @@
 package com.lia.mediaplayer.ui.widget;
 
+import com.lia.mediaplayer.ui.canvas.Canvas;
 import com.lia.mediaplayer.ui.canvas.Rect;
+import com.lia.mediaplayer.ui.theme.Role;
 import java.util.IdentityHashMap;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Lays children out one after another along an axis: {@link Row} across, {@link Column} down.
@@ -20,6 +23,7 @@ public abstract sealed class Linear extends Container permits Row, Column {
     private int gap;
     private int padMain;
     private int padCross;
+    private @Nullable Role background;
 
     Linear(boolean horizontal) {
         this.horizontal = horizontal;
@@ -55,6 +59,21 @@ public abstract sealed class Linear extends Container permits Row, Column {
         padCross = cross;
         invalidate();
         return this;
+    }
+
+    /** Fills the bounds with {@code role} behind the children. */
+    public Linear background(Role role) {
+        background = role;
+        return this;
+    }
+
+    @Override
+    public void render(Canvas canvas, RenderContext ctx) {
+        Role fill = background;
+        if (fill != null) {
+            canvas.fill(bounds(), ctx.color(fill));
+        }
+        super.render(canvas, ctx);
     }
 
     private Slot slot(Widget child) {

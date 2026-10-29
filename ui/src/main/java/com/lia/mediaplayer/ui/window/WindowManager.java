@@ -7,10 +7,12 @@ import com.lia.mediaplayer.ui.input.InputEvent;
 import com.lia.mediaplayer.ui.widget.Constraints;
 import com.lia.mediaplayer.ui.widget.InputContext;
 import com.lia.mediaplayer.ui.widget.RenderContext;
+import com.lia.mediaplayer.ui.widget.Size;
 import com.lia.mediaplayer.ui.widget.Widget;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Supplier;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -19,7 +21,10 @@ import org.jspecify.annotations.Nullable;
  * comes to the front. Client thread only.
  *
  * <p>A window opened before anything has been drawn waits for the first frame to be placed,
- * because only then is the size of the screen known.
+ * because only then is the size of the screen known. It opens where the last window of its kind
+ * was left, if the {@link WindowMemory} knows, or else in the default corner.
+ *
+ * <p>A hidden window is not drawn and takes no input, but stays open: its sound goes on.
  */
 // Windows and widgets are entities: "this window" always means that very instance.
 @SuppressWarnings("ReferenceEquality")
@@ -28,6 +33,15 @@ public final class WindowManager {
     private final List<Window> windows = new ArrayList<>();
     private final InputContext input = new InputContext();
     private Rect screen = Rect.EMPTY;
+    private WindowMemory memory = WindowMemory.NONE;
+    private Supplier<Corner> corner = () -> Corner.TOP_RIGHT;
+
+    public WindowManager() {}
+
+    public WindowManager(WindowMemory memory, Supplier<Corner> corner) {
+        this.memory = memory;
+        this.corner = corner;
+    }
 
     /** Opens {@code window} on top of the others. */
     public <W extends Window> W open(W window) {
@@ -51,12 +65,17 @@ public final class WindowManager {
         return windows.isEmpty();
     }
 
-    /** The front window, which keyboard shortcuts act on. */
+    /** The front window that shows, which keys go to. */
     public Optional<Window> focused() {
-        return windows.isEmpty() ? Optional.empty() : Optional.of(windows.getLast());
+        for (int i = windows.size() - 1; i >= 0; i--) {
+            if (!windows.get(i).isHidden()) {
+                return Optional.of(windows.get(i));
+            }
+        }
+        return Optional.empty();
     }
 
-    /** The front-most open window of {@code type}. */
+    /** The front-most open window of {@code type}, hidden or not. */
     public <W extends Window> Optional<W> frontMost(Class<W> type) {
         for (int i = windows.size() - 1; i >= 0; i--) {
             if (type.isInstance(windows.get(i))) {
@@ -64,6 +83,32 @@ public final class WindowManager {
             }
         }
         return Optional.empty();
+    }
+
+    /** How many open windows are hidden. */
+    public int hiddenCount() {
+        return (int) windows.stream().filter(Window::isHidden).count();
+    }
+
+    /** Whether every window is hidden (and there is at least one). */
+    public boolean allHidden() {
+        return !windows.isEmpty() && windows.stream().allMatch(Window::isHidden);
+    }
+
+    /** Hides every window if any shows, else shows them all: the "hide all" key. */
+    public void toggleHidden() {
+        boolean anyShown = windows.stream().anyMatch(w -> !w.isHidden());
+        for (Window window : windows) {
+            window.setHidden(anyShown);
+        }
+        if (anyShown) {
+            input.releaseCapture();
+        }
+    }
+
+    /** Called by a window that the player moved or resized: the next of its kind opens there. */
+    void remembered(Window window) {
+        memory.remember(window.kind(), window.frame());
     }
 
     void raise(Window window) {
@@ -107,11 +152,16 @@ public final class WindowManager {
     public void render(Canvas canvas, RenderContext ctx) {
         prepare(canvas, ctx);
         int count = windows.size();
+        boolean first = true;
         for (int i = 0; i < count; i++) {
             Window window = windows.get(i);
-            if (i > 0) {
+            if (window.isHidden()) {
+                continue;
+            }
+            if (!first) {
                 canvas.nextLayer();
             }
+            first = false;
             window.render(canvas, coveredAbove(i, ctx.pointerX(), ctx.pointerY()) ? ctx.withoutPointer() : ctx);
         }
         if (ctx.interactive() && input.captured() == null) {
@@ -127,11 +177,16 @@ public final class WindowManager {
     public void renderHud(Canvas canvas, RenderContext ctx) {
         prepare(canvas, ctx);
         RenderContext still = ctx.withoutPointer();
-        for (int i = 0; i < windows.size(); i++) {
-            if (i > 0) {
+        boolean first = true;
+        for (Window window : windows) {
+            if (window.isHidden()) {
+                continue;
+            }
+            if (!first) {
                 canvas.nextLayer();
             }
-            windows.get(i).renderHud(canvas, still);
+            first = false;
+            window.renderHud(canvas, still);
         }
     }
 
@@ -159,7 +214,16 @@ public final class WindowManager {
                 others.add(other.frame());
             }
         }
-        window.setFrame(Placement.initial(screen, window.preferredSize(), others));
+        Size preferred = window.preferredSize();
+        Optional<Rect> remembered = memory.frame(window.kind());
+        if (remembered.isPresent()) {
+            Rect last = remembered.get();
+            int width = last.width() > 0 ? last.width() : preferred.width();
+            int height = last.height() > 0 && window.isResizable() ? last.height() : preferred.height();
+            window.setFrame(Placement.cascade(screen, new Rect(last.x(), last.y(), width, height), others));
+        } else {
+            window.setFrame(Placement.initial(screen, preferred, others, corner.get()));
+        }
     }
 
     /** Whether a window is under {@code (x, y)}. */
@@ -169,7 +233,7 @@ public final class WindowManager {
 
     private boolean coveredAbove(int index, double x, double y) {
         for (int i = index + 1; i < windows.size(); i++) {
-            if (windows.get(i).frame().contains(x, y)) {
+            if (!windows.get(i).isHidden() && windows.get(i).frame().contains(x, y)) {
                 return true;
             }
         }
@@ -179,7 +243,7 @@ public final class WindowManager {
     private @Nullable Window windowAt(double x, double y) {
         for (int i = windows.size() - 1; i >= 0; i--) {
             Window window = windows.get(i);
-            if (window.frame().contains(x, y)) {
+            if (!window.isHidden() && window.frame().contains(x, y)) {
                 return window;
             }
         }
@@ -259,7 +323,7 @@ public final class WindowManager {
         ys.add(screen.bottom());
         ys.add(screen.centerY());
         for (Window other : windows) {
-            if (other == moving) {
+            if (other == moving || other.isHidden()) {
                 continue;
             }
             Rect r = other.frame();

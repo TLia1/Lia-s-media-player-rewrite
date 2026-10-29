@@ -1,6 +1,8 @@
 package com.lia.mediaplayer.platform.mc;
 
+import com.lia.mediaplayer.api.text.Text;
 import com.lia.mediaplayer.core.MediaPlayerCore;
+import com.lia.mediaplayer.ui.ButtonSink;
 import com.lia.mediaplayer.ui.ClientEvents;
 import com.lia.mediaplayer.ui.MediaPlayerUi;
 import com.lia.mediaplayer.ui.input.InputEvent;
@@ -9,8 +11,11 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import java.util.List;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
@@ -29,11 +34,13 @@ public final class ModBootstrap implements AutoCloseable {
     private final MediaPlayerUi ui;
     private final McKeyMappings keys = new McKeyMappings();
     private final McChat chat = new McChat();
+    private final McScreens screens;
 
     private ModBootstrap(McPlatform platform) {
         this.platform = platform;
         this.core = new MediaPlayerCore(platform);
-        this.ui = new MediaPlayerUi(core, new McScreens(platform.textures(), platform.text(), chat));
+        this.screens = new McScreens(platform.textures(), platform.text(), chat);
+        this.ui = new MediaPlayerUi(core, screens);
         McChat.install(ui);
     }
 
@@ -48,6 +55,11 @@ public final class ModBootstrap implements AutoCloseable {
     /** The key mappings to register with the game. */
     public List<KeyMapping> keyMappings() {
         return keys.all();
+    }
+
+    /** The mod's settings, opened from the game's mod list; closing them goes back to {@code parent}. */
+    public Screen settingsScreen(Screen parent) {
+        return screens.host(ui.settingsScreen(), parent);
     }
 
     /** The client commands, for a dispatcher of source type {@code S}. */
@@ -91,8 +103,11 @@ public final class ModBootstrap implements AutoCloseable {
     public boolean keyPressed(Screen screen, int keyCode, int scanCode, int modifiers) {
         ScreenContext context = McScreens.context(screen);
         // The game counts mapped keys only in the world; over the mod's own screens a mapped
-        // key still means its hotkey, so the key that opened a screen also closes it.
-        if (context.kind() == ScreenContext.Kind.HOSTED && keys.pressedOverScreen(keyCode, scanCode, ui)) {
+        // key still means its hotkey, so the key that opened a screen also closes it — unless
+        // it is being typed into a text field.
+        if (context.kind() == ScreenContext.Kind.HOSTED
+                && context.chatFieldEmpty()
+                && keys.pressedOverScreen(keyCode, scanCode, ui)) {
             return true;
         }
         return ui.input(context, McInput.key(keyCode, modifiers));
@@ -102,8 +117,24 @@ public final class ModBootstrap implements AutoCloseable {
         return ui.input(McScreens.context(screen), new InputEvent.CharTyped(codePoint));
     }
 
-    public void screenOpened(Screen screen) {
-        ui.screenOpened(McScreens.context(screen));
+    /**
+     * A screen was built. {@code addWidget} is the loader's way of adding a widget to a screen
+     * that is already built.
+     */
+    public void screenOpened(Screen screen, Consumer<AbstractWidget> addWidget) {
+        ui.screenOpened(McScreens.context(screen), new ButtonSink() {
+            @Override
+            public int screenWidth() {
+                return screen.width;
+            }
+
+            @Override
+            public void add(Text label, int x, int y, int width, int height, Runnable onPress) {
+                addWidget.accept(Button.builder(McText.toComponent(label), button -> onPress.run())
+                        .bounds(x, y, width, height)
+                        .build());
+            }
+        });
     }
 
     public void worldLeft() {

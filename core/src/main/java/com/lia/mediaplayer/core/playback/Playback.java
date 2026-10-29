@@ -2,6 +2,7 @@ package com.lia.mediaplayer.core.playback;
 
 import com.lia.mediaplayer.api.source.MediaRef;
 import java.util.Optional;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.random.RandomGenerator;
 import org.jspecify.annotations.Nullable;
@@ -19,6 +20,7 @@ public final class Playback implements AutoCloseable {
     private final PlaybackEngine engine;
     private final PlayQueue<MediaRef> queue;
     private final Consumer<Playback> onClosed;
+    private final BiConsumer<Playback, MediaRef> onTrackStarted;
     private PlayerOptions options;
     private PlayerListener listener = PlayerListener.NONE;
     private @Nullable Player player;
@@ -29,12 +31,14 @@ public final class Playback implements AutoCloseable {
             PlaybackEngine engine,
             PlayerOptions options,
             RandomGenerator random,
-            Consumer<Playback> onClosed) {
+            Consumer<Playback> onClosed,
+            BiConsumer<Playback, MediaRef> onTrackStarted) {
         this.id = id;
         this.engine = engine;
         this.options = options;
         this.queue = new PlayQueue<>(random);
         this.onClosed = onClosed;
+        this.onTrackStarted = onTrackStarted;
     }
 
     public long id() {
@@ -65,6 +69,12 @@ public final class Playback implements AutoCloseable {
             previous.close();
         }
         player = engine.play(ref, options, this::onPlayerState);
+        onTrackStarted.accept(this, ref);
+    }
+
+    /** Whether this playback fetches sound only, the picture never being shown. */
+    public boolean audioOnly() {
+        return options.resolve().audioOnly();
     }
 
     /**

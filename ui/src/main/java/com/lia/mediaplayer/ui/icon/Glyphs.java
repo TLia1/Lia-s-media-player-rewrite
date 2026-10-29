@@ -28,6 +28,11 @@ public final class Glyphs {
         }
     }
 
+    /** A play triangle on its own: play this. */
+    public static void play(Canvas c, int x, int y, int color) {
+        playPause(c, x, y, false, color);
+    }
+
     /** Skip to next: a triangle and a bar. */
     public static void next(Canvas c, int x, int y, int color) {
         for (int i = 0; i < SIZE; i++) {
@@ -129,6 +134,88 @@ public final class Glyphs {
         c.fill(x + 9, y + 5, x + 10, y + 8, color);
         c.fill(x + 7, y, x + 8, y + 4, color);
         c.fill(x + 8, y + 1, x + 10, y + 2, color);
+    }
+
+    /** A heart, filled when it is on (a favourite), outlined when not. */
+    public static void heart(Canvas c, int x, int y, boolean filled, int color) {
+        int[][] rows = {{2, 4, 6, 8}, {1, 5, 5, 9}, {1, 9}, {1, 9}, {2, 8}, {3, 7}, {4, 6}, {5, 5}};
+        for (int r = 0; r < rows.length; r++) {
+            int[] spans = rows[r];
+            int py = y + 2 + r;
+            if (filled) {
+                for (int i = 0; i < spans.length; i += 2) {
+                    c.fill(x + spans[i], py, x + spans[i + 1] + 1, py + 1, color);
+                }
+            } else {
+                int left = spans[0];
+                int right = spans[spans.length - 1];
+                if (r == 0) {
+                    for (int i = 0; i < spans.length; i += 2) {
+                        c.fill(x + spans[i], py, x + spans[i + 1] + 1, py + 1, color);
+                    }
+                } else {
+                    c.fill(x + left, py, x + left + 1, py + 1, color);
+                    c.fill(x + right, py, x + right + 1, py + 1, color);
+                }
+                if (r == 1) {
+                    c.fill(x + 5, py, x + 6, py + 1, color);
+                }
+            }
+        }
+    }
+
+    /** A bar at the bottom of the box: hide, minimise. */
+    public static void hide(Canvas c, int x, int y, int color) {
+        c.fill(x + 2, y + 7, x + 9, y + 9, color);
+    }
+
+    /** Four corners pointing out: the picture as large as the screen allows. */
+    public static void theater(Canvas c, int x, int y, int color) {
+        c.fill(x + 1, y + 1, x + 4, y + 2, color);
+        c.fill(x + 1, y + 1, x + 2, y + 4, color);
+        c.fill(x + 7, y + 1, x + 10, y + 2, color);
+        c.fill(x + 9, y + 1, x + 10, y + 4, color);
+        c.fill(x + 1, y + 9, x + 4, y + 10, color);
+        c.fill(x + 1, y + 7, x + 2, y + 10, color);
+        c.fill(x + 7, y + 9, x + 10, y + 10, color);
+        c.fill(x + 9, y + 7, x + 10, y + 10, color);
+    }
+
+    /** Three lines with a dot before each: the queue. */
+    public static void queue(Canvas c, int x, int y, int color) {
+        for (int i = 0; i < 3; i++) {
+            int py = y + 2 + i * 3;
+            c.fill(x + 1, py, x + 2, py + 1, color);
+            c.fill(x + 3, py, x + 10, py + 1, color);
+        }
+    }
+
+    /** A plus: add. */
+    public static void plus(Canvas c, int x, int y, int color) {
+        c.fill(x + 5, y + 2, x + 6, y + 9, color);
+        c.fill(x + 2, y + 5, x + 9, y + 6, color);
+    }
+
+    /** A triangle pointing up: move up. */
+    public static void up(Canvas c, int x, int y, int color) {
+        for (int i = 0; i < 4; i++) {
+            c.fill(x + 5 - i, y + 3 + i, x + 6 + i, y + 4 + i, color);
+        }
+    }
+
+    /** A triangle pointing down: move down. */
+    public static void down(Canvas c, int x, int y, int color) {
+        for (int i = 0; i < 4; i++) {
+            c.fill(x + 2 + i, y + 4 + i, x + 9 - i, y + 5 + i, color);
+        }
+    }
+
+    /** A quaver: music, the playlists. */
+    public static void note(Canvas c, int x, int y, int color) {
+        c.fill(x + 6, y + 1, x + 7, y + 8, color);
+        c.fill(x + 7, y + 1, x + 9, y + 2, color);
+        c.fill(x + 8, y + 2, x + 10, y + 3, color);
+        c.fill(x + 3, y + 7, x + 7, y + 10, color);
     }
 
     /**

@@ -3,8 +3,10 @@ package com.lia.mediaplayer.platform.mc;
 import com.lia.mediaplayer.core.platform.TextMeasurer;
 import com.lia.mediaplayer.ui.input.InputEvent;
 import com.lia.mediaplayer.ui.screen.UiScreen;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
+import org.jspecify.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
 
 /**
@@ -13,19 +15,22 @@ import org.lwjgl.glfw.GLFW;
  * {@code UiScreen}, so this is the only place the mod depends on vanilla's screen API.
  *
  * <p>The loader's screen events still fire around it, so the media windows draw over it and
- * take their input first, as they do over the chat.
+ * take their input first, as they do over the chat. Closing it goes back to the screen it was
+ * opened over, if any: the pause menu for the settings, the playlists for the history.
  */
 public final class HostScreen extends Screen {
 
     private final UiScreen hosted;
     private final McTextures textures;
     private final TextMeasurer measurer;
+    private final @Nullable Screen parent;
 
-    HostScreen(UiScreen hosted, McTextures textures, TextMeasurer measurer) {
+    HostScreen(UiScreen hosted, McTextures textures, TextMeasurer measurer, @Nullable Screen parent) {
         super(McText.toComponent(hosted.title()));
         this.hosted = hosted;
         this.textures = textures;
         this.measurer = measurer;
+        this.parent = parent;
     }
 
     public UiScreen hosted() {
@@ -73,6 +78,11 @@ public final class HostScreen extends Screen {
     @Override
     public boolean isPauseScreen() {
         return hosted.isPauseScreen();
+    }
+
+    @Override
+    public void onClose() {
+        Minecraft.getInstance().setScreen(parent);
     }
 
     @Override

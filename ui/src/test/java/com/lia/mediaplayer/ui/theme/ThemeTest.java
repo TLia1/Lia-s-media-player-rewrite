@@ -29,6 +29,28 @@ class ThemeTest {
     }
 
     @Test
+    void everyBuiltInThemeHasItsOwnIdAndNameAndEveryRole() {
+        assertThat(Themes.all()).extracting(Theme::id).doesNotHaveDuplicates();
+        for (Theme theme : Themes.all()) {
+            assertThat(theme.colors()).containsOnlyKeys(Role.values());
+            assertThat(theme.name()).isInstanceOf(Text.Translatable.class);
+        }
+        assertThat(Themes.LIGHT.color(Role.TEXT)).isNotEqualTo(Themes.DARK.color(Role.TEXT));
+    }
+
+    @Test
+    void theRegistryFallsBackToDarkAndRefusesTwins() {
+        var registry = new ThemeRegistry();
+        assertThat(registry.byId("liasmediaplayer:light")).isSameAs(Themes.LIGHT);
+        assertThat(registry.byId("someaddon:gone")).isSameAs(Themes.DARK);
+        Theme red = Themes.DARK.with("test:red", Text.literal("Red"), Map.of(Role.FILL, 0xFFFF0000));
+        registry.register(red);
+        assertThat(registry.all()).endsWith(red);
+        assertThat(registry.choices()).extracting(c -> c.id()).contains("test:red", "liasmediaplayer:dark");
+        assertThatThrownBy(() -> registry.register(red)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     void aThemeMissingARoleIsRefused() {
         assertThatThrownBy(() -> Theme.of("test:bare", Text.literal("Bare"), Map.of(Role.TEXT, 0)))
                 .isInstanceOf(IllegalArgumentException.class)

@@ -34,7 +34,7 @@ class AudioBarTest {
 
     @Test
     void aCompactBarWithTheTitleAndTheTransport() {
-        var bar = windows.open(new AudioBar(playback, new FakePlatform(gameDir)));
+        var bar = windows.open(new AudioBar(playback, WindowServices.of(new FakePlatform(gameDir))));
         playback.snapshot = FakePlayback.at(
                 new PlayerState.Playing(Duration.ofSeconds(5)), Duration.ofSeconds(5), Duration.ofSeconds(200));
         render(-1, -1);
@@ -58,11 +58,11 @@ class AudioBarTest {
 
     @Test
     void aFailureShowsInTheTitleWithItsAdvice() {
-        var bar = windows.open(new AudioBar(playback, new FakePlatform(gameDir)));
+        var bar = windows.open(new AudioBar(playback, WindowServices.of(new FakePlatform(gameDir))));
         var error = new PlaybackError(PlaybackError.Cause.NETWORK, "Connection refused");
         playback.snapshot = FakePlayback.at(new PlayerState.Failed(error), Duration.ZERO, null);
         render(-1, -1);
-        assertThat(canvas.drewText("error.liasmediaplayer.cause.network")).isTrue();
+        assertThat(canvas.drewText("error.liasmediaplayer.cause")).isTrue();
         Rect f = bar.frame();
         render(f.x() + 20, f.y() + 5);
         assertThat(canvas.tooltip())
@@ -80,7 +80,7 @@ class AudioBarTest {
 
     @Test
     void closingTheBarClosesItsPlayback() {
-        var bar = windows.open(new AudioBar(playback, new FakePlatform(gameDir)));
+        var bar = windows.open(new AudioBar(playback, WindowServices.of(new FakePlatform(gameDir))));
         render(-1, -1);
         bar.close();
         assertThat(playback.closed).isTrue();

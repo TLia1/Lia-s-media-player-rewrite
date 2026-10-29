@@ -12,6 +12,9 @@
   "entrypoints": {
     "client": [
       "com.lia.mediaplayer.platform.fabric.FabricEntrypoint"
+    ],
+    "modmenu": [
+      "com.lia.mediaplayer.platform.fabric.ModMenuIntegration"
     ]
   },
   "mixins": [

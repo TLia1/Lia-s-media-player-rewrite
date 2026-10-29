@@ -1,14 +1,35 @@
 # Lia's Media Player — v3
 
 A rewrite of Lia's Media Player. The design, the reasons behind it and the milestones are
-in [REWRITE-DESIGN.md](REWRITE-DESIGN.md). This repository is at **milestone M3**: on top of
-the headless engine of M1 and the windows of M2, links posted in chat become labels —
-`[picture]`, `[gif]`, `[youtube]`, `[soundcloud]`, … for every site v2 knew. Hovering a
-picture label previews it (GIFs animate); clicking a label pins the picture in a window,
-plays a video in the front video window (Shift: a new window, Alt: sound only) or a sound in
-the audio bar. Windows are live (move, resize, snap, Ctrl+wheel zoom, transport controls)
-over the chat and over the media controls screen, and show their picture on the HUD
-otherwise. The library, settings (including the link filters' lists) and themes come with M4.
+in [REWRITE-DESIGN.md](REWRITE-DESIGN.md). This repository is at **milestone M4**: on top of
+the headless engine of M1, the windows of M2 and the chat links of M3, the player has v2's
+library and settings back.
+
+- **Playlists** (the "Playlists" chip over the chat, or its key): create, rename, search,
+  add links (a YouTube playlist or SoundCloud set is expanded into its tracks), drag entries
+  into order, remove them, play in order or shuffled, looping or not, copy out as m3u, make
+  one from the links on the clipboard, delete (twice, to be sure).
+- **History and favourites**: everything played, most recent first; the heart keeps an
+  entry for good, "Clear" keeps the hearts. Play again, or add to the playlist you came from.
+- **Settings** (the pause menu's button, Mod Menu or NeoForge's mod list, or a key):
+  generated from every setting's spec, with groups, search, descriptions, warnings and a
+  reset per row; changes apply at once. Picture height, the chat link filter, the picture
+  memory, yt-dlp updates, the theme (dark, high contrast, Minecraft, light), where new
+  windows open, the window caps, the hover preview — and the tools' state with "Update the
+  tools".
+- **Windows remember**: the next window of a kind opens where the last was left, with its
+  loop, shuffle and queue. Each player has a queue panel (double click to play, drag to
+  reorder), previous and next, a heart, copy-link (Shift: at the current time), theatre
+  mode, and hide; hidden players keep playing and a banner says what they start.
+- **Keys**: v2's twelve key mappings (unbound by default), and over the chat v2's shortcuts —
+  Space, ←/→ (Shift: further) while nothing is typed, Ctrl+M/L/S/N/P/F/↑/↓ always.
+- **Upgrading from v2**: the first start imports v2's `config.json`, `playlists.json`,
+  `history.json` and `windows.json`, and keeps them as `*.v2.bak`.
+
+Not yet at parity: v2's ±10 s buttons on the video window (the arrow keys seek), thumbnails
+in the playlist and history lists (titles are there; pictures come with the disk cache of
+M7), and the "sound only when hidden" setting (§20, decision 6; hidden players keep
+decoding, as in v2).
 
 ## Trying it in game
 
@@ -27,7 +48,8 @@ trailing `true` opens a new window instead of queueing into the front one):
 
 Or post a link in chat and click the label it becomes.
 
-Open the chat (`T`) to use the window's controls. "Open the media controls" in the game's
+Open the chat (`T`) to use the window's controls and the "Playlists" chip; the settings are
+behind the pause menu's "Media Player Settings". "Open the media controls" in the game's
 controls screen (unbound by default) shows the windows live without the chat. The first
 start downloads yt-dlp and ffmpeg into the game directory's `liasmediaplayer/bin/` unless they are found on
 the machine.

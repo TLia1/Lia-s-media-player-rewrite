@@ -1,7 +1,9 @@
 package com.lia.mediaplayer.ui.testing;
 
+import com.lia.mediaplayer.api.media.MediaKind;
 import com.lia.mediaplayer.api.media.RepeatMode;
 import com.lia.mediaplayer.api.source.MediaRef;
+import com.lia.mediaplayer.api.text.Text;
 import com.lia.mediaplayer.core.playback.PlayerSnapshot;
 import com.lia.mediaplayer.core.playback.PlayerState;
 import com.lia.mediaplayer.core.video.FramePool;
@@ -31,6 +33,9 @@ public final class FakePlayback implements PlaybackControl {
     public RepeatMode repeat = RepeatMode.OFF;
     public boolean shuffle;
     public boolean closed;
+    public String sourceId = "test:video";
+    public final List<MediaRef> upcoming = new ArrayList<>();
+    public int queueVersion;
     public int released;
 
     /** A snapshot in {@code state} at {@code position} of {@code duration}, with a title. */
@@ -57,8 +62,48 @@ public final class FakePlayback implements PlaybackControl {
     }
 
     @Override
-    public Optional<String> currentUrl() {
-        return Optional.ofNullable(url);
+    public Optional<MediaRef> currentRef() {
+        String current = url;
+        return current == null
+                ? Optional.empty()
+                : Optional.of(new MediaRef(current, MediaKind.VIDEO, sourceId, Text.literal("[video]")));
+    }
+
+    @Override
+    public List<MediaRef> upcoming() {
+        return List.copyOf(upcoming);
+    }
+
+    @Override
+    public int queueVersion() {
+        return queueVersion;
+    }
+
+    @Override
+    public void jumpTo(int index) {
+        calls.add("jumpTo " + index);
+    }
+
+    @Override
+    public void removeQueued(int index) {
+        upcoming.remove(index);
+        queueVersion++;
+        calls.add("remove " + index);
+    }
+
+    @Override
+    public void moveQueued(int from, int insertBefore) {
+        calls.add("move " + from + " " + insertBefore);
+    }
+
+    @Override
+    public void setRepeat(RepeatMode mode) {
+        repeat = mode;
+    }
+
+    @Override
+    public void setShuffle(boolean on) {
+        shuffle = on;
     }
 
     @Override

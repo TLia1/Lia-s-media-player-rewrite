@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
@@ -21,6 +22,8 @@ import org.slf4j.LoggerFactory;
  *       permit on its own virtual thread.
  *   <li>{@link #decode()}: platform threads for CPU-heavy decoding, so long computations
  *       do not sit on the carriers the virtual threads share.
+ *   <li>{@link #timer()}: one daemon thread that only waits, for delayed work such as a
+ *       debounced file write; what it starts is handed to {@link #io()}.
  * </ul>
  *
  * <p>Threads that live as long as a player (its actor, a session's readers, the audio pump)
@@ -38,6 +41,8 @@ public final class CoreExecutors implements AutoCloseable {
     private final Semaphore ioPermits = new Semaphore(IO_PERMITS);
     private final Executor io = this::runIo;
     private final ExecutorService decode;
+    private final ScheduledExecutorService timer =
+            Executors.newSingleThreadScheduledExecutor(daemonFactory("lmp-timer-"));
 
     public CoreExecutors() {
         int threads = Math.max(1, Runtime.getRuntime().availableProcessors() / 2);
@@ -52,6 +57,11 @@ public final class CoreExecutors implements AutoCloseable {
     /** CPU-heavy decoding. */
     public Executor decode() {
         return decode;
+    }
+
+    /** Runs delayed tasks; they must be quick, and hand anything slow to {@link #io()}. */
+    public ScheduledExecutorService timer() {
+        return timer;
     }
 
     /** Starts a named virtual thread, for work that blocks on IO for as long as its owner lives. */
@@ -97,6 +107,7 @@ public final class CoreExecutors implements AutoCloseable {
     /** Interrupts what is still running and waits briefly for it to stop. */
     @Override
     public void close() {
+        timer.shutdownNow();
         ioThreads.shutdownNow();
         decode.shutdownNow();
         try {

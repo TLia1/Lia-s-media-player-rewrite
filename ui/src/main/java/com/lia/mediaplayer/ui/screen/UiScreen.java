@@ -12,6 +12,7 @@ import com.lia.mediaplayer.ui.widget.Container;
 import com.lia.mediaplayer.ui.widget.InputContext;
 import com.lia.mediaplayer.ui.widget.RenderContext;
 import com.lia.mediaplayer.ui.widget.Size;
+import com.lia.mediaplayer.ui.widget.TextField;
 import com.lia.mediaplayer.ui.widget.Widget;
 import java.util.function.LongSupplier;
 import java.util.function.Supplier;
@@ -60,6 +61,11 @@ public abstract class UiScreen {
         return true;
     }
 
+    /** Whether a text field has the keyboard: keys are text then, not hotkeys or shortcuts. */
+    public final boolean isTyping() {
+        return input.focused() instanceof TextField;
+    }
+
     /** Called when the screen is closed, by Escape or otherwise. */
     public void removed() {}
 
@@ -102,6 +108,27 @@ public abstract class UiScreen {
     }
 
     private boolean dispatch(InputEvent event) {
+        if (event instanceof InputEvent.PointerDown) {
+            // A press anywhere takes the keyboard from the field that had it, unless the press
+            // is on that very field, which takes it right back.
+            Widget before = input.focused();
+            input.clearFocus();
+            boolean taken = dispatchToTree(event);
+            if (before instanceof TextField field && !input.isFocused(field)) {
+                field.blur();
+            }
+            return taken;
+        }
+        Widget focused = input.focused();
+        if ((event instanceof InputEvent.KeyDown || event instanceof InputEvent.CharTyped)
+                && focused != null
+                && focused.onInput(event, input)) {
+            return true;
+        }
+        return dispatchToTree(event);
+    }
+
+    private boolean dispatchToTree(InputEvent event) {
         var captured = input.captured();
         boolean followsCapture = event instanceof InputEvent.PointerDrag || event instanceof InputEvent.PointerUp;
         if (followsCapture && captured != null) {

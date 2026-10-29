@@ -5,6 +5,7 @@ import com.lia.mediaplayer.api.source.MediaRef;
 import com.lia.mediaplayer.core.playback.PlayerSnapshot;
 import com.lia.mediaplayer.core.video.VideoFrame;
 import java.time.Duration;
+import java.util.List;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 
@@ -18,8 +19,13 @@ public interface PlaybackControl {
     /** The current track's state, or {@link PlayerSnapshot#initial()} before the first. */
     PlayerSnapshot snapshot();
 
+    /** The current track. */
+    Optional<MediaRef> currentRef();
+
     /** The link of the current track. */
-    Optional<String> currentUrl();
+    default Optional<String> currentUrl() {
+        return currentRef().map(MediaRef::url);
+    }
 
     /** The newest frame due now, or {@code null}; give it back with {@link #releaseFrame}. */
     @Nullable
@@ -48,6 +54,25 @@ public interface PlaybackControl {
 
     /** How many tracks wait after the current one. */
     int queued();
+
+    /** The tracks waiting, in play order. */
+    List<MediaRef> upcoming();
+
+    /** Moves with every change to the waiting tracks, so a list can tell when to read them again. */
+    int queueVersion();
+
+    /** Plays the waiting track at {@code index} now. */
+    void jumpTo(int index);
+
+    /** Drops the waiting track at {@code index}. */
+    void removeQueued(int index);
+
+    /** Moves a waiting track into the gap before what is now at {@code insertBefore}. */
+    void moveQueued(int from, int insertBefore);
+
+    void setRepeat(RepeatMode mode);
+
+    void setShuffle(boolean on);
 
     RepeatMode repeat();
 

@@ -31,7 +31,7 @@ public final class McScreens implements UiHost {
         return switch (screen) {
             case null -> ScreenContext.NONE;
             case ChatScreen chat -> new ScreenContext(ScreenContext.Kind.CHAT, chatFieldEmpty(chat));
-            case HostScreen host -> new ScreenContext(ScreenContext.Kind.HOSTED, true);
+            case HostScreen host -> new ScreenContext(ScreenContext.Kind.HOSTED, !host.hosted().isTyping());
             case PauseScreen pause -> new ScreenContext(ScreenContext.Kind.PAUSE, true);
             default -> new ScreenContext(ScreenContext.Kind.OTHER, true);
         };
@@ -57,13 +57,23 @@ public final class McScreens implements UiHost {
 
     @Override
     public void openScreen(UiScreen screen) {
-        Minecraft.getInstance().setScreen(new HostScreen(screen, textures, measurer));
+        Minecraft.getInstance().setScreen(host(screen, null));
+    }
+
+    @Override
+    public void openScreenOver(UiScreen screen) {
+        Minecraft.getInstance().setScreen(host(screen, Minecraft.getInstance().screen));
+    }
+
+    /** The vanilla screen that shows {@code screen} and goes back to {@code parent} when closed. */
+    HostScreen host(UiScreen screen, @Nullable Screen parent) {
+        return new HostScreen(screen, textures, measurer, parent);
     }
 
     @Override
     public void closeScreen() {
-        if (Minecraft.getInstance().screen instanceof HostScreen) {
-            Minecraft.getInstance().setScreen(null);
+        if (Minecraft.getInstance().screen instanceof HostScreen host) {
+            host.onClose();
         }
     }
 

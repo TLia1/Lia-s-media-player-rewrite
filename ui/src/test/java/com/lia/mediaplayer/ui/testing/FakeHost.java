@@ -2,36 +2,49 @@ package com.lia.mediaplayer.ui.testing;
 
 import com.lia.mediaplayer.ui.UiHost;
 import com.lia.mediaplayer.ui.screen.UiScreen;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
-import org.jspecify.annotations.Nullable;
 
 /** A host that remembers which of the mod's screens is open, and has chat links where a test puts them. */
 public final class FakeHost implements UiHost {
 
     private final Map<String, String> chatLinks = new HashMap<>();
-    private @Nullable UiScreen open;
+    private final Deque<UiScreen> stack = new ArrayDeque<>();
     private int opened;
 
     @Override
     public void openScreen(UiScreen screen) {
-        open = screen;
+        while (!stack.isEmpty()) {
+            stack.pop().removed();
+        }
+        stack.push(screen);
+        opened++;
+    }
+
+    @Override
+    public void openScreenOver(UiScreen screen) {
+        stack.push(screen);
         opened++;
     }
 
     @Override
     public void closeScreen() {
-        UiScreen current = open;
-        open = null;
-        if (current != null) {
-            current.removed();
+        if (!stack.isEmpty()) {
+            stack.pop().removed();
         }
     }
 
     @Override
     public Optional<UiScreen> currentScreen() {
-        return Optional.ofNullable(open);
+        return Optional.ofNullable(stack.peek());
+    }
+
+    /** How many screens are open, the one on top and those it was opened over. */
+    public int depth() {
+        return stack.size();
     }
 
     public int opened() {

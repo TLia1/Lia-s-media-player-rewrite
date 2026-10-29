@@ -36,7 +36,7 @@ final class McKeyMappings {
     void poll(ClientEvents events) {
         mappings.forEach((hotkey, mapping) -> {
             while (mapping.consumeClick()) {
-                events.hotkeyPressed(hotkey);
+                events.hotkeyPressed(hotkey, McInput.currentMods());
             }
         });
     }
@@ -45,7 +45,7 @@ final class McKeyMappings {
     boolean pressedOverScreen(int keyCode, int scanCode, ClientEvents events) {
         for (var entry : mappings.entrySet()) {
             if (!entry.getValue().isUnbound() && entry.getValue().matches(keyCode, scanCode)) {
-                events.hotkeyPressed(entry.getKey());
+                events.hotkeyPressed(entry.getKey(), McInput.currentMods());
                 return true;
             }
         }

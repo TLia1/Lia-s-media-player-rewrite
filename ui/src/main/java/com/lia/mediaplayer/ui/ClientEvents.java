@@ -35,11 +35,14 @@ public interface ClientEvents {
      */
     boolean input(ScreenContext screen, InputEvent event);
 
-    /** A screen was opened, or the open one rebuilt (the window was resized). */
-    void screenOpened(ScreenContext screen);
+    /**
+     * A screen was opened, or the open one rebuilt (the window was resized). {@code buttons}
+     * adds the game's own buttons to it.
+     */
+    void screenOpened(ScreenContext screen, ButtonSink buttons);
 
-    /** A key mapping of the mod was pressed, in the world or over a screen. */
-    void hotkeyPressed(Hotkey hotkey);
+    /** A key mapping of the mod was pressed, in the world or over a screen, with {@code mods} held. */
+    void hotkeyPressed(Hotkey hotkey, Mods mods);
 
     /**
      * A chat message is about to be shown. The platform hands over its text split where its
