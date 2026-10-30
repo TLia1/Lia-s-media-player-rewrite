@@ -53,7 +53,7 @@ import java.time.InstantSource;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.random.RandomGenerator;
+import java.util.SplittableRandom;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -192,8 +192,9 @@ public final class MediaPlayerCore implements AutoCloseable {
                 executors.io(),
                 clientThread,
                 System::nanoTime));
-        this.playbacks =
-                disposer.add(new PlaybackRegistry(engine, collections, clientThread, RandomGenerator.getDefault()));
+        // Not RandomGenerator.getDefault(): it looks the algorithm up through a ServiceLoader,
+        // which under NeoForge's module layers (1.21.11) sees the JDK's provider twice and throws.
+        this.playbacks = disposer.add(new PlaybackRegistry(engine, collections, clientThread, new SplittableRandom()));
         playbacks.onTrackStarted(
                 (playback, ref) -> library.recordPlay(ref.url(), playback.audioOnly() ? MediaKind.AUDIO : ref.kind()));
 

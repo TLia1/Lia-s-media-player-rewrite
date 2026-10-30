@@ -1,9 +1,10 @@
 # Lia's Media Player — v3
 
 A rewrite of Lia's Media Player. The design, the reasons behind it and the milestones are
-in [REWRITE-DESIGN.md](REWRITE-DESIGN.md). This repository is at **milestone M5**: on top of
-the headless engine of M1, the windows of M2, the chat links of M3 and the library and settings
-of M4, addons are back, through API 4.
+in [REWRITE-DESIGN.md](REWRITE-DESIGN.md). This repository is at **milestone M6**: on top of
+the headless engine of M1, the windows of M2, the chat links of M3, the library and settings
+of M4 and the addons of M5 (API 4), the mod builds for **Minecraft 1.21.1, 1.21.11 and 26.3,
+on both NeoForge and Fabric**.
 
 - **Playlists** (the "Playlists" chip over the chat, or its key): create, rename, search,
   add links (a YouTube playlist or SoundCloud set is expanded into its tracks), drag entries
@@ -124,6 +125,15 @@ and prints the player's state every second. Leave out `--script` to type command
 ```
 
 Builds every target; jars land in `platform/versions/<target>/build/libs/`.
+
+| Minecraft | Java | NeoForge | Fabric API | Mod Menu |
+|---|---|---|---|---|
+| 1.21.1 | 21 | 21.1.230 | 0.116.15 | 11.0.4 |
+| 1.21.11 | 21 | 21.11.48 | 0.141.6 | 17.0.1 |
+| 26.3 | 25 | 26.3.0.99 | 0.165.0 | 21.0.0 |
+
+The 26.3 jar loads on any 26.3.x. The 26.x targets build with a Java 25 toolchain, which
+Gradle downloads if none is installed.
 
 ```bash
 ./gradlew :platform:1.21.1-fabric:runClient

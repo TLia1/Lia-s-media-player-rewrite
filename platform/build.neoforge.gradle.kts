@@ -1,6 +1,6 @@
 plugins {
     id("dev.kikugie.stonecutter")
-    id("net.neoforged.moddev") version "2.0.144"
+    id("net.neoforged.moddev") version "2.0.148"
     // Applied below, once Stonecutter has loaded the properties it reads.
     id("lmp.platform-common") apply false
 }
@@ -87,12 +87,13 @@ tasks.withType<ProcessResources>().configureEach {
         "loader_version_range" to prop("mod.loader_version_range"),
         "neo_version" to prop("deps.neoforge"),
         "minecraft_version_range" to prop("deps.minecraft_range"),
+        "java_version" to prop("deps.java"),
     )
     inputs.properties(replaceProperties)
 
     exclude("fabric.mod.json")
 
-    filesMatching("META-INF/neoforge.mods.toml") {
+    filesMatching(listOf("META-INF/neoforge.mods.toml", "liasmediaplayer.mixins.json")) {
         expand(replaceProperties)
     }
 }

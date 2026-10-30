@@ -39,7 +39,23 @@ public final class McScreens implements UiHost {
 
     /** The screen open now. */
     public static ScreenContext current() {
-        return context(Minecraft.getInstance().screen);
+        return context(open());
+    }
+
+    /** The vanilla screen open now, if any. 26.2 moved it from the client to its GUI. */
+    static @Nullable Screen open() {
+        //? if <26.2 {
+        return Minecraft.getInstance().screen;
+        //?} else
+        /*return Minecraft.getInstance().gui.screen();*/
+    }
+
+    /** Opens {@code screen}, or closes the open one for {@code null}. */
+    static void show(@Nullable Screen screen) {
+        //? if <26.2 {
+        Minecraft.getInstance().setScreen(screen);
+        //?} else
+        /*Minecraft.getInstance().gui.setScreen(screen);*/
     }
 
     /**
@@ -57,12 +73,12 @@ public final class McScreens implements UiHost {
 
     @Override
     public void openScreen(UiScreen screen) {
-        Minecraft.getInstance().setScreen(host(screen, null));
+        show(host(screen, null));
     }
 
     @Override
     public void openScreenOver(UiScreen screen) {
-        Minecraft.getInstance().setScreen(host(screen, Minecraft.getInstance().screen));
+        show(host(screen, open()));
     }
 
     /** The vanilla screen that shows {@code screen} and goes back to {@code parent} when closed. */
@@ -72,14 +88,14 @@ public final class McScreens implements UiHost {
 
     @Override
     public void closeScreen() {
-        if (Minecraft.getInstance().screen instanceof HostScreen host) {
+        if (open() instanceof HostScreen host) {
             host.onClose();
         }
     }
 
     @Override
     public Optional<UiScreen> currentScreen() {
-        return Minecraft.getInstance().screen instanceof HostScreen host ? Optional.of(host.hosted()) : Optional.empty();
+        return open() instanceof HostScreen host ? Optional.of(host.hosted()) : Optional.empty();
     }
 
     @Override

@@ -19,11 +19,21 @@ import org.spongepowered.asm.mixin.injection.ModifyVariable;
 @Mixin(ChatComponent.class)
 abstract class ChatComponentMixin {
 
+    // 26.1 split the public entry by origin (player, server, client) over one private method,
+    // which is still the single point every message passes.
+    //? if <26.1 {
     @ModifyVariable(
             method =
                     "addMessage(Lnet/minecraft/network/chat/Component;Lnet/minecraft/network/chat/MessageSignature;Lnet/minecraft/client/GuiMessageTag;)V",
             at = @At("HEAD"),
             argsOnly = true)
+    //?} else {
+    /*@ModifyVariable(
+            method =
+                    "addMessage(Lnet/minecraft/network/chat/Component;Lnet/minecraft/network/chat/MessageSignature;Lnet/minecraft/client/multiplayer/chat/GuiMessageSource;Lnet/minecraft/client/multiplayer/chat/GuiMessageTag;)V",
+            at = @At("HEAD"),
+            argsOnly = true)
+    *///?}
     private Component liasmediaplayer$labelLinks(Component message) {
         return McChat.displayed(message);
     }

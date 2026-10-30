@@ -475,6 +475,40 @@ else.
 | 26.1 | Fabric: `HudRenderCallback` → `HudElementRegistry`, `Screens.getButtons` → `getWidgets`, `KeyBindingHelper` → `KeyMappingHelper` | `FabricEvents` |
 | 26.2 | `mc.screen` / `setScreen` → `mc.gui.screen()` / `setScreen`; `getMainCamera` → `mainCamera` | `McScreens`, `McCamera` |
 | 26.3 | `InputConstants.Type.KEYSYM` → `KEYBOARD` | `McKeyMappings` |
+| 26.3 | GLFW → SDL3: key codes are SDL scancodes, modifier bits are left/right pairs, `KeyEvent` is `(key, keycode, modifiers)`, `isKeyDown(int)` takes no window | `McInput`, loader bridges |
+| 26.3 | `com.mojang.blaze3d.textures` → `com.mojang.renderpearl.api.textures`; `Util.getPlatform().openUri` → `Blaze3D.openUri` | `McTextures`, `McPlatform` |
+| 26.3 | `tooltip(…)` gained a trailing flag (`false` for a plain tooltip) | `McCanvas` |
+
+Settled in M6, on top of the table (each threshold read from the game jar of that version
+where one was at hand; 1.21.9 and 1.21.10 are not targets, so a change seen first in 1.21.11
+is guarded at 1.21.11 and says "unbisected"):
+
+- **Textures** have two implementations of the inner `StreamTexture`, behind a guard on the
+  class: before 1.21.5 the mod's own staging buffer and a direct OpenGL upload; from 1.21.5 a
+  `DynamicTexture` whose `NativeImage` is the staging buffer (one copy through its public
+  pointer), uploaded by the GPU device. From 1.21.11 it gets a clamp-to-edge linear
+  `GpuSampler`; before, `setFilter` and `setClamp`.
+- **Chat**: from 26.1 the mixin targets the private
+  `addMessage(Component, MessageSignature, GuiMessageSource, GuiMessageTag)`, which the
+  three public entries (player, server, client) all call — still one point for every
+  message. authlib 7 (1.21.11) made `GameProfile` a record, so the sender is `name()`.
+- **Keys** are read through `InputConstants.KEY_*` on every version, never GLFW's or
+  SDL's constants, so the key map has no guard; only the modifier bits and the Super/GUI
+  keys, which 1.21.1's `InputConstants` does not name, are a guarded block of constants.
+  The macOS flag is `Util.getPlatform() == OSX` (`Minecraft.ON_OSX` is gone in 1.21.11).
+- **Pure type renames are token replacements** in `platform/stonecutter.gradle.kts`:
+  `ResourceLocation` → `Identifier` and the `Util` import (1.21.11), `GuiGraphics` →
+  `GuiGraphicsExtractor` (26.1, NeoForge's `getGuiGraphics()` left alone). They touch a
+  handful of files, but a guard at every declaration would be noisier than the rename.
+  Anything that changes a signature or a call shape is a guard.
+- **Build**: the mixin config's `compatibilityLevel` is `JAVA_<deps.java>`; ModDevGradle
+  is 2.0.148 (2.0.144 cannot recompile NeoForge 26.3); jspecify is 1.0.0, which Minecraft
+  pins exactly from 1.21.11. The 26.3 range is `[26.3, 26.4)`, so a 26.3.x patch loads it.
+- **Found by the smoke test** (each client started to its title screen, §16): NeoForge 26.3
+  constructs mods before the client exists, so `McClientThread` holds what is posted before
+  then and hands it over at the next post or tick; and under NeoForge 1.21.11's module
+  layers `RandomGenerator.getDefault()` sees the JDK's provider twice and throws, so the
+  queue's shuffle uses a `SplittableRandom`.
 
 Guidelines for `platform/mc`:
 
@@ -483,7 +517,8 @@ Guidelines for `platform/mc`:
 - Prefer a guard inside a small method over Stonecutter token replacement. v2's
   global replacements (`GuiGraphics` → `GuiGraphicsExtractor` across 14 files) were
   needed only because those types were everywhere. In v3 they appear in a handful of
-  files.
+  files. The exception, settled in M6, is a pure type rename: there a replacement is the
+  smaller change (see above).
 - When a family of versions diverges too much (for example 1.21.x versus 26.x
   rendering), a second implementation of the same interface behind a guard on the
   class is clearer than many inline guards.
@@ -1539,7 +1574,7 @@ Each milestone ends with something that runs.
 | M3 | Chat: display-time mixin, `ChatRewriter`, labels, hover preview, click routing, filters; images and GIFs; image windows | Every v2 link type works from chat. |
 | M4 | Library and settings: playlists, history, settings screen, themes, window state, keybinds, shortcuts, media controls screen, v2 import | Feature parity with v2 for players. Done, short of three things listed in the README. |
 | M5 | API v4, addon entry points on both loaders, an example addon in the repository, API docs and porting guide | The example addon registers a source, a theme and a window button on both loaders. Done; the parts of v2's API that need engine work wait behind `Capability` flags (§11, settled in M5). |
-| M6 | Version matrix: add 1.21.11 and the latest 26.x on both loaders (§20, decision 1) | All targets build and pass the smoke test. |
+| M6 | Version matrix: add 1.21.11 and the latest 26.x on both loaders (§20, decision 1) | All targets build and pass the smoke test. Done: 1.21.1, 1.21.11 and 26.3 on both loaders (§5.4, settled in M6). |
 | M7 | Performance pass with JFR and the debug overlay; disk cache; ffmpeg image fallback; polish | Budget in §12 met on a mid-range machine. |
 
 ---

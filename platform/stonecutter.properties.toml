@@ -36,3 +36,25 @@ deps.neoforge = "21.1.230"
 deps.parchment = "1.21.1:2024.11.17"
 deps.fabric_api = "0.116.15+1.21.1"
 deps.modmenu = "11.0.4"
+
+["1.21.11"]
+deps.minecraft = "1.21.11"
+deps.minecraft_range = "[1.21.11]"
+deps.minecraft_range_fabric = "1.21.11"
+deps.java = 21
+deps.neoforge = "21.11.48"
+deps.parchment = "1.21.11:2025.12.20"
+deps.fabric_api = "0.141.6+1.21.11"
+deps.modmenu = "17.0.1"
+
+# 26.1 moved to Java 25 and ships unobfuscated; Parchment publishes nothing past 1.21.11.
+# The newest 26.x release, so the range is open: a 26.3.x patch loads it.
+["26.3"]
+deps.minecraft = "26.3"
+deps.minecraft_range = "[26.3,26.4)"
+deps.minecraft_range_fabric = ">=26.3 <26.4"
+deps.java = 25
+deps.neoforge = "26.3.0.99"
+deps.parchment = ""
+deps.fabric_api = "0.165.0+26.3"
+deps.modmenu = "21.0.0"

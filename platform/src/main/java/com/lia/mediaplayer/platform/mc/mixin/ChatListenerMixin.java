@@ -32,7 +32,11 @@ abstract class ChatListenerMixin {
             boolean onlyShowSecureChat,
             Instant timestamp,
             CallbackInfoReturnable<Boolean> callback) {
+        // authlib 7 (1.21.11; unbisected) made the profile a record.
+        //? if <1.21.11 {
         McChat.senderShowing(sender.getName());
+        //?} else
+        /*McChat.senderShowing(sender.name());*/
     }
 
     @Inject(method = "showMessageToPlayer", at = @At("RETURN"))

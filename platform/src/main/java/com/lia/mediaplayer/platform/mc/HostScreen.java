@@ -3,11 +3,15 @@ package com.lia.mediaplayer.platform.mc;
 import com.lia.mediaplayer.core.platform.TextMeasurer;
 import com.lia.mediaplayer.ui.input.InputEvent;
 import com.lia.mediaplayer.ui.screen.UiScreen;
-import net.minecraft.client.Minecraft;
+import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import org.jspecify.annotations.Nullable;
-import org.lwjgl.glfw.GLFW;
+//? if >=1.21.11 {
+/*import net.minecraft.client.input.CharacterEvent;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.input.MouseButtonEvent;
+*///?}
 
 /**
  * The one vanilla screen of the mod. It hosts a {@link UiScreen}: draws it through a canvas,
@@ -17,6 +21,10 @@ import org.lwjgl.glfw.GLFW;
  * <p>The loader's screen events still fire around it, so the media windows draw over it and
  * take their input first, as they do over the chat. Closing it goes back to the screen it was
  * opened over, if any: the pause menu for the settings, the playlists for the history.
+ *
+ * <p>Two of vanilla's changes show here: 1.21.11 passes input as records ({@code
+ * MouseButtonEvent}, {@code KeyEvent}, {@code CharacterEvent}) rather than loose arguments, and
+ * 26.1 extracts a screen's render state rather than rendering it.
  */
 public final class HostScreen extends Screen {
 
@@ -37,16 +45,31 @@ public final class HostScreen extends Screen {
         return hosted;
     }
 
+    //? if <26.1 {
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         if (hosted.drawsBackground()) {
             renderBackground(graphics, mouseX, mouseY, partialTick);
         }
+        draw(graphics, mouseX, mouseY);
+    }
+    //?} else {
+    /*@Override
+    public void extractRenderState(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        if (hosted.drawsBackground()) {
+            extractBackground(graphics, mouseX, mouseY, partialTick);
+        }
+        draw(graphics, mouseX, mouseY);
+    }
+    *///?}
+
+    private void draw(GuiGraphics graphics, int mouseX, int mouseY) {
         var canvas = new McCanvas(graphics, textures, measurer);
         hosted.render(canvas, mouseX, mouseY, McInput.currentMods());
         canvas.finish();
     }
 
+    //? if <1.21.11 {
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         return hosted.input(McInput.press(mouseX, mouseY, button));
@@ -58,13 +81,8 @@ public final class HostScreen extends Screen {
     }
 
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        return hosted.input(McInput.scroll(mouseX, mouseY, scrollY));
-    }
-
-    @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+        if (keyCode == InputConstants.KEY_ESCAPE) {
             return super.keyPressed(keyCode, scanCode, modifiers);
         }
         return hosted.input(McInput.key(keyCode, modifiers)) || super.keyPressed(keyCode, scanCode, modifiers);
@@ -74,6 +92,35 @@ public final class HostScreen extends Screen {
     public boolean charTyped(char codePoint, int modifiers) {
         return hosted.input(new InputEvent.CharTyped(codePoint));
     }
+    //?} else {
+    /*@Override
+    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+        return hosted.input(McInput.press(event.x(), event.y(), event.button()));
+    }
+
+    @Override
+    public boolean mouseReleased(MouseButtonEvent event) {
+        return hosted.input(McInput.release(event.x(), event.y(), event.button()));
+    }
+
+    @Override
+    public boolean keyPressed(KeyEvent event) {
+        if (event.key() == InputConstants.KEY_ESCAPE) {
+            return super.keyPressed(event);
+        }
+        return hosted.input(McInput.key(event.key(), event.modifiers())) || super.keyPressed(event);
+    }
+
+    @Override
+    public boolean charTyped(CharacterEvent event) {
+        return hosted.input(new InputEvent.CharTyped(event.codepoint()));
+    }
+    *///?}
+
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        return hosted.input(McInput.scroll(mouseX, mouseY, scrollY));
+    }
 
     @Override
     public boolean isPauseScreen() {
@@ -82,7 +129,7 @@ public final class HostScreen extends Screen {
 
     @Override
     public void onClose() {
-        Minecraft.getInstance().setScreen(parent);
+        McScreens.show(parent);
     }
 
     @Override

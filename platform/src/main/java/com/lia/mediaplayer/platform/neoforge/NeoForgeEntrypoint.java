@@ -41,6 +41,9 @@ public final class NeoForgeEntrypoint {
 
         modBus.addListener(RegisterKeyMappingsEvent.class, event -> {
             mod.loadAddons(LiasMediaPlayerApi.takePending());
+            // From 1.21.11 a category is a registered object, declared before its mappings.
+            //? if >=1.21.11
+            /*event.registerCategory(mod.keyCategory());*/
             mod.keyMappings().forEach(event::register);
         });
         container.registerExtensionPoint(
@@ -71,7 +74,12 @@ public final class NeoForgeEntrypoint {
             }
         });
         bus.addListener(ScreenEvent.KeyPressed.Pre.class, event -> {
-            if (mod.keyPressed(event.getScreen(), event.getKeyCode(), event.getScanCode(), event.getModifiers())) {
+            // 26.3 runs on SDL: the second code is SDL's keycode, no longer a GLFW scancode.
+            //? if <26.3 {
+            boolean taken = mod.keyPressed(event.getScreen(), event.getKeyCode(), event.getScanCode(), event.getModifiers());
+            //?} else
+            /*boolean taken = mod.keyPressed(event.getScreen(), event.getKey(), event.getKeycode(), event.getModifiers());*/
+            if (taken) {
                 event.setCanceled(true);
             }
         });

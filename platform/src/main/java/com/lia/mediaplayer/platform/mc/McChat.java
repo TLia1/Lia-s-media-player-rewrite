@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.components.ChatComponent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.chat.Style;
@@ -14,6 +15,8 @@ import net.minecraft.network.chat.TextColor;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+//? if >=1.21.11
+/*import net.minecraft.client.gui.ActiveTextCollector;*/
 
 /**
  * The chat, as the mod sees it: links rewritten into labels when a message is shown, and the
@@ -133,13 +136,55 @@ public final class McChat {
      */
     Optional<String> linkAt(double x, double y) {
         if (!cacheValid || x != cachedX || y != cachedY) {
-            cachedLink = McText.clickedUrl(Minecraft.getInstance().gui.getChat().getClickedComponentStyleAt(x, y));
+            cachedLink = McText.clickedUrl(styleAt(x, y));
             cachedX = x;
             cachedY = y;
             cacheValid = true;
         }
         return Optional.ofNullable(cachedLink);
     }
+
+    /**
+     * The style of the chat text under {@code (x, y)}. From 1.21.11 the chat answers by replaying
+     * its lines into a collector, with what its own drawing is given: the scaled height it lays
+     * lines out from, the tick count that fades them, and whether it is open (26.1: a display
+     * mode, of which foreground is "open").
+     */
+    private static @Nullable Style styleAt(double x, double y) {
+        var minecraft = Minecraft.getInstance();
+        ChatComponent chat = chat(minecraft);
+        //? if <1.21.11 {
+        return chat.getClickedComponentStyleAt(x, y);
+        //?} else {
+        /*var finder = new ActiveTextCollector.ClickableStyleFinder(minecraft.font, (int) x, (int) y);
+        int height = minecraft.getWindow().getGuiScaledHeight();
+        //? if <26.1 {
+        chat.captureClickableText(finder, height, guiTicks(minecraft), chat.isChatFocused());
+        //?} else {
+        /^chat.captureClickableText(finder, height, guiTicks(minecraft), chat.isChatFocused()
+                ? ChatComponent.DisplayMode.FOREGROUND
+                : ChatComponent.DisplayMode.BACKGROUND);
+        ^///?}
+        return finder.result();
+        *///?}
+    }
+
+    /** The chat. 26.2 moved it, and the GUI's tick count, from the GUI to its HUD. */
+    private static ChatComponent chat(Minecraft minecraft) {
+        //? if <26.2 {
+        return minecraft.gui.getChat();
+        //?} else
+        /*return minecraft.gui.hud.getChat();*/
+    }
+
+    //? if >=1.21.11 {
+    /*private static int guiTicks(Minecraft minecraft) {
+        //? if <26.2 {
+        return minecraft.gui.getGuiTicks();
+        //?} else
+        /^return minecraft.gui.hud.getGuiTicks();^/
+    }
+    *///?}
 
     /** Forgets the cached answer. Once a client tick. */
     void tick() {

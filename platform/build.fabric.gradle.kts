@@ -66,7 +66,7 @@ tasks.withType<ProcessResources>().configureEach {
 
     exclude("META-INF/neoforge.mods.toml")
 
-    filesMatching("fabric.mod.json") {
+    filesMatching(listOf("fabric.mod.json", "liasmediaplayer.mixins.json")) {
         expand(replaceProperties)
     }
 }

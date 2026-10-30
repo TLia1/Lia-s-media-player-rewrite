@@ -8,7 +8,9 @@ errorprone-plugin = "5.1.1"
 nullaway = "0.14.3"
 spotless = "8.10.4"
 palantir-java-format = "2.103.0"
-jspecify = "1.0.1"
+# The version Minecraft ships from 1.21.11, which pins it exactly (NeoForge's metadata says
+# "strictly"); 1.0.1 has the same annotations.
+jspecify = "1.0.0"
 # The versions Minecraft 1.21.1 ships. Only compiled against; the game provides them.
 slf4j = "2.0.9"
 gson = "2.10.1"

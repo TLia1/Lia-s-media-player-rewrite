@@ -67,6 +67,13 @@ public final class ModBootstrap implements AutoCloseable {
         return keys.all();
     }
 
+    //? if >=1.21.11 {
+    /*/^* The category of {@link #keyMappings()}, which a loader registers before them. ^/
+    public KeyMapping.Category keyCategory() {
+        return McKeyMappings.CATEGORY;
+    }
+    *///?}
+
     /** The mod's settings, opened from the game's mod list; closing them goes back to {@code parent}. */
     public Screen settingsScreen(Screen parent) {
         return screens.host(ui.settingsScreen(), parent);
@@ -79,6 +86,7 @@ public final class ModBootstrap implements AutoCloseable {
 
     /** End of a client tick: between two frames, the moment released textures are freed. */
     public void tick() {
+        platform.tick();
         platform.textures().flushReleases();
         chat.tick();
         keys.poll(ui);
@@ -110,6 +118,10 @@ public final class ModBootstrap implements AutoCloseable {
         return ui.input(McScreens.context(screen), McInput.scroll(x, y, delta));
     }
 
+    /**
+     * A key over {@code screen}. {@code scanCode} is the second code of the game's key event:
+     * GLFW's scancode, or from 26.3 SDL's keycode. It is only handed back to the game.
+     */
     public boolean keyPressed(Screen screen, int keyCode, int scanCode, int modifiers) {
         ScreenContext context = McScreens.context(screen);
         // The game counts mapped keys only in the world; over the mod's own screens a mapped
@@ -123,7 +135,7 @@ public final class ModBootstrap implements AutoCloseable {
         return ui.input(context, McInput.key(keyCode, modifiers));
     }
 
-    public boolean charTyped(Screen screen, char codePoint) {
+    public boolean charTyped(Screen screen, int codePoint) {
         return ui.input(McScreens.context(screen), new InputEvent.CharTyped(codePoint));
     }
 

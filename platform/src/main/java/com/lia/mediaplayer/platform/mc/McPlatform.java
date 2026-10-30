@@ -7,7 +7,10 @@ import com.lia.mediaplayer.core.platform.TextureService;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.file.Path;
+//? if <26.3 {
 import net.minecraft.Util;
+//?} else
+/*import com.mojang.blaze3d.Blaze3D;*/
 import net.minecraft.client.Minecraft;
 import net.minecraft.sounds.SoundSource;
 import org.slf4j.Logger;
@@ -25,7 +28,7 @@ public final class McPlatform implements Platform {
     private final String loader;
     private final String minecraftVersion;
     private final Path gameDirectory;
-    private final ClientThread clientThread = new McClientThread();
+    private final McClientThread clientThread = new McClientThread();
     private final McTextures textures = new McTextures();
     private final TextMeasurer text = new McTextMeasurer();
     private final Clipboard clipboard = new Clipboard() {
@@ -54,6 +57,11 @@ public final class McPlatform implements Platform {
     @Override
     public ClientThread clientThread() {
         return clientThread;
+    }
+
+    /** Between ticks: what was posted before the client existed goes to it now. */
+    void tick() {
+        clientThread.flushEarly();
     }
 
     @Override
@@ -88,7 +96,10 @@ public final class McPlatform implements Platform {
             String scheme = uri.getScheme();
             // Only web links leave the game; anything else could open a local program.
             if ("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme)) {
+                //? if <26.3 {
                 Util.getPlatform().openUri(uri);
+                //?} else
+                /*Blaze3D.openUri(uri);*/
             }
         } catch (URISyntaxException e) {
             LOGGER.warn("Not opening malformed link {}", url);
