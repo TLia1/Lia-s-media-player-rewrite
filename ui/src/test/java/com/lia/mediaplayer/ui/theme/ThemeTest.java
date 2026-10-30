@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.lia.mediaplayer.api.text.Text;
+import com.lia.mediaplayer.api.ui.ThemeRole;
+import com.lia.mediaplayer.api.ui.ThemeSpec;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
@@ -55,5 +57,17 @@ class ThemeTest {
         assertThatThrownBy(() -> Theme.of("test:bare", Text.literal("Bare"), Map.of(Role.TEXT, 0)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("test:bare");
+    }
+
+    @Test
+    void everyRoleAnAddonCanNameIsARoleOfTheUi() {
+        for (ThemeRole role : ThemeRole.values()) {
+            assertThat(Role.of(role).name()).isEqualTo(role.name());
+        }
+        assertThat(ThemeRole.values()).hasSameSizeAs(Role.values());
+        Theme sunset = Themes.from(
+                ThemeSpec.of("myaddon:sunset", Text.literal("Sunset")).with(ThemeRole.FILL, 0xFFFF8A50));
+        assertThat(sunset.color(Role.FILL)).isEqualTo(0xFFFF8A50);
+        assertThat(sunset.color(Role.TEXT)).isEqualTo(Themes.DARK.color(Role.TEXT));
     }
 }

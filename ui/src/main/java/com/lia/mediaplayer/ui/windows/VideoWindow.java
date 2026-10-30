@@ -47,6 +47,8 @@ public final class VideoWindow extends Window implements PlayerWindow {
     public VideoWindow(PlaybackControl control, WindowServices services) {
         super(Text.literal(""));
         this.control = control;
+        CornerButtons.addonButtons(
+                services.actions(), AddonActions.player(MediaKind.VIDEO, control), this::addTitleButton);
         titleButtons = List.of(
                 addTitleButton(CornerButtons.favorite(control::currentRef, MediaKind.VIDEO, services)),
                 addTitleButton(

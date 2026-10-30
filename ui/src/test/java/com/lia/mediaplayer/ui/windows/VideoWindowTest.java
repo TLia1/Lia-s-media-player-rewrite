@@ -8,6 +8,7 @@ import com.lia.mediaplayer.api.media.RepeatMode;
 import com.lia.mediaplayer.api.source.MediaRef;
 import com.lia.mediaplayer.api.text.Text;
 import com.lia.mediaplayer.core.diag.PlaybackError;
+import com.lia.mediaplayer.core.link.ShareLinks;
 import com.lia.mediaplayer.core.platform.TextureRef;
 import com.lia.mediaplayer.core.playback.PlayerSnapshot;
 import com.lia.mediaplayer.core.playback.PlayerState;
@@ -440,7 +441,8 @@ class VideoWindowTest {
                 }
             }
         };
-        var services = new WindowServices(platform, favorites, url -> Optional.of("Title of " + url));
+        var services = new WindowServices(
+                platform, favorites, url -> Optional.of("Title of " + url), ShareLinks::atTime, AddonActions.NONE);
         var hearted = windows.open(new VideoWindow(playback, services));
         render(-1, -1, 0);
         click(hearted.titleButtons().getFirst());

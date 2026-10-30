@@ -1,7 +1,13 @@
 package com.lia.mediaplayer.platform.fabric;
 
+import com.lia.mediaplayer.api.LiasMediaPlayerApi;
+import com.lia.mediaplayer.api.LiasMediaPlayerApi.PendingAddon;
+import com.lia.mediaplayer.api.MediaPlayerAddon;
+import com.lia.mediaplayer.core.ModInfo;
 import com.lia.mediaplayer.platform.mc.McPlatform;
 import com.lia.mediaplayer.platform.mc.ModBootstrap;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
@@ -17,6 +23,8 @@ import net.fabricmc.fabric.api.client.screen.v1.ScreenMouseEvents;
 import net.fabricmc.fabric.api.client.screen.v1.Screens;
 import net.fabricmc.loader.api.FabricLoader;
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Fabric's way in: builds the mod and forwards Fabric API events to it. No decisions here:
@@ -24,8 +32,13 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>Fabric's screen events are per screen, so the screen hooks are subscribed from {@code
  * AFTER_INIT} for each screen as it is built.
+ *
+ * <p>Addons are the {@code "liasmediaplayer"} entrypoints of other mods, registered here before
+ * the key mappings are handed to Fabric, whatever order Fabric starts the mods in.
  */
 public final class FabricEntrypoint implements ClientModInitializer {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(FabricEntrypoint.class);
 
     /** The running mod, for the mod menu's settings button; the only static besides constants. */
     private static @Nullable ModBootstrap running;
@@ -66,9 +79,29 @@ public final class FabricEntrypoint implements ClientModInitializer {
                     .register((s, key, scancode, modifiers) -> !mod.keyPressed(s, key, scancode, modifiers));
         });
 
+        mod.loadAddons(addons(loader));
         mod.keyMappings().forEach(KeyBindingHelper::registerKeyBinding);
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registries) -> dispatcher.register(
                 mod.<FabricClientCommandSource>showCommand((context, message) ->
                         context.getSource().sendError(message))));
+    }
+
+    /** The addons: every {@code "liasmediaplayer"} entrypoint, then any handed to the API's door. */
+    private static List<PendingAddon> addons(FabricLoader loader) {
+        var addons = new ArrayList<PendingAddon>();
+        try {
+            for (var container : loader.getEntrypointContainers(ModInfo.MOD_ID, MediaPlayerAddon.class)) {
+                String addonId = container.getProvider().getMetadata().getId();
+                try {
+                    addons.add(new PendingAddon(addonId, container.getEntrypoint()));
+                } catch (RuntimeException e) {
+                    LOGGER.error("Addon {} could not be created", addonId, e);
+                }
+            }
+        } catch (RuntimeException e) {
+            LOGGER.error("The addons' entrypoints could not be read", e);
+        }
+        addons.addAll(LiasMediaPlayerApi.takePending());
+        return addons;
     }
 }

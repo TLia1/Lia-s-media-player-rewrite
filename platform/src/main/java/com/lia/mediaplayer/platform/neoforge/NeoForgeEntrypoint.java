@@ -1,5 +1,6 @@
 package com.lia.mediaplayer.platform.neoforge;
 
+import com.lia.mediaplayer.api.LiasMediaPlayerApi;
 import com.lia.mediaplayer.core.ModInfo;
 import com.lia.mediaplayer.platform.mc.McPlatform;
 import com.lia.mediaplayer.platform.mc.ModBootstrap;
@@ -23,6 +24,10 @@ import net.neoforged.neoforge.event.GameShuttingDownEvent;
 /**
  * NeoForge's way in: builds the mod and forwards NeoForge events to it. No decisions here:
  * "the mod took it" becomes {@code setCanceled(true)}, and that is all.
+ *
+ * <p>Addons hand themselves to {@link LiasMediaPlayerApi#registerAddon} from their own {@code
+ * @Mod} constructors. NeoForge constructs every mod before it asks for key mappings, so that
+ * is when they are registered, whichever mod was constructed first.
  */
 @Mod(value = ModInfo.MOD_ID, dist = Dist.CLIENT)
 public final class NeoForgeEntrypoint {
@@ -34,8 +39,10 @@ public final class NeoForgeEntrypoint {
                 .orElse("unknown");
         var mod = ModBootstrap.start(new McPlatform("NeoForge", minecraftVersion, FMLPaths.GAMEDIR.get()));
 
-        modBus.addListener(
-                RegisterKeyMappingsEvent.class, event -> mod.keyMappings().forEach(event::register));
+        modBus.addListener(RegisterKeyMappingsEvent.class, event -> {
+            mod.loadAddons(LiasMediaPlayerApi.takePending());
+            mod.keyMappings().forEach(event::register);
+        });
         container.registerExtensionPoint(
                 IConfigScreenFactory.class, (IConfigScreenFactory) (owner, parent) -> mod.settingsScreen(parent));
 

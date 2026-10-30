@@ -1,5 +1,6 @@
 package com.lia.mediaplayer.ui.windows;
 
+import com.lia.mediaplayer.api.media.MediaHandle;
 import com.lia.mediaplayer.api.media.RepeatMode;
 import com.lia.mediaplayer.api.source.MediaRef;
 import com.lia.mediaplayer.core.playback.Playback;
@@ -17,10 +18,21 @@ public final class CorePlaybackControl implements PlaybackControl {
 
     private final Playback playback;
     private final PlaybackRegistry registry;
+    private final Optional<MediaHandle> handle;
 
     public CorePlaybackControl(Playback playback, PlaybackRegistry registry) {
+        this(playback, registry, Optional.empty());
+    }
+
+    public CorePlaybackControl(Playback playback, PlaybackRegistry registry, Optional<MediaHandle> handle) {
         this.playback = playback;
         this.registry = registry;
+        this.handle = handle;
+    }
+
+    @Override
+    public Optional<MediaHandle> handle() {
+        return handle;
     }
 
     @Override

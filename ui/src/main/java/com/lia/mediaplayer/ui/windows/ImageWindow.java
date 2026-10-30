@@ -46,6 +46,7 @@ public final class ImageWindow extends Window {
         this.ref = ref;
         this.images = images;
         Supplier<Optional<MediaRef>> current = () -> Optional.of(ref);
+        CornerButtons.addonButtons(services.actions(), AddonActions.picture(ref), this::addTitleButton);
         addTitleButton(CornerButtons.favorite(current, MediaKind.IMAGE, services));
         addTitleButton(CornerButtons.copy(current, () -> Duration.ZERO, services));
         addTitleButton(CornerButtons.browser(current, services));

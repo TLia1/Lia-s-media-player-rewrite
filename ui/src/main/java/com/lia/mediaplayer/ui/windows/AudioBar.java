@@ -31,6 +31,8 @@ public final class AudioBar extends Window implements PlayerWindow {
     public AudioBar(PlaybackControl control, WindowServices services) {
         super(Text.literal(""));
         this.control = control;
+        CornerButtons.addonButtons(
+                services.actions(), AddonActions.player(MediaKind.AUDIO, control), this::addTitleButton);
         addTitleButton(CornerButtons.favorite(control::currentRef, MediaKind.AUDIO, services));
         addTitleButton(CornerButtons.copy(control::currentRef, () -> MediaTime.shown(control.snapshot()), services));
         addTitleButton(CornerButtons.browser(control::currentRef, services));

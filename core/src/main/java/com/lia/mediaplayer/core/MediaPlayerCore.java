@@ -4,6 +4,11 @@ import com.google.gson.JsonElement;
 import com.lia.mediaplayer.api.ApiVersion;
 import com.lia.mediaplayer.api.media.MediaKind;
 import com.lia.mediaplayer.api.source.ResolveOptions;
+import com.lia.mediaplayer.core.addon.AddonGuard;
+import com.lia.mediaplayer.core.addon.LibraryReader;
+import com.lia.mediaplayer.core.addon.MediaEvents;
+import com.lia.mediaplayer.core.addon.PlaybackHandles;
+import com.lia.mediaplayer.core.addon.SettingValuesView;
 import com.lia.mediaplayer.core.event.EventBus;
 import com.lia.mediaplayer.core.ffmpeg.ProbeCache;
 import com.lia.mediaplayer.core.image.ImageCache;
@@ -25,6 +30,7 @@ import com.lia.mediaplayer.core.playback.PlaybackEngine;
 import com.lia.mediaplayer.core.playback.PlaybackRegistry;
 import com.lia.mediaplayer.core.playback.PlayerOptions;
 import com.lia.mediaplayer.core.playback.PlayerServices;
+import com.lia.mediaplayer.core.policy.Interceptors;
 import com.lia.mediaplayer.core.resolve.CollectionExpander;
 import com.lia.mediaplayer.core.resolve.DirectResolver;
 import com.lia.mediaplayer.core.resolve.GiphyResolver;
@@ -88,6 +94,12 @@ public final class MediaPlayerCore implements AutoCloseable {
     private final PlaybackRegistry playbacks;
     private final ImageCache images;
     private final Titles titles;
+    private final AddonGuard addonGuard = new AddonGuard();
+    private final Interceptors interceptors = new Interceptors();
+    private final PlaybackHandles handles;
+    private final MediaEvents mediaEvents;
+    private final SettingValuesView settingValues;
+    private final LibraryReader libraryReader;
 
     public MediaPlayerCore(Platform platform) {
         this(platform, CoreOptions.defaults());
@@ -151,7 +163,7 @@ public final class MediaPlayerCore implements AutoCloseable {
                 ToolManager.systemToday());
 
         this.sources = new SourceRegistry(BuiltinSources.all());
-        this.chat = new ChatRewriter(sources);
+        this.chat = new ChatRewriter(sources, interceptors);
         settings.applyAll(
                 List.of(
                         CoreSettings.LINK_FILTER,
@@ -193,6 +205,11 @@ public final class MediaPlayerCore implements AutoCloseable {
         var unusedCacheSize =
                 settings.apply(CoreSettings.IMAGE_CACHE_MB, megabytes -> images.setMaxBytes(megabytes * 1024L * 1024L));
         this.titles = new Titles(sources, resolver, clientThread);
+
+        this.handles = new PlaybackHandles(playbacks, sources, clientThread);
+        this.mediaEvents = MediaEvents.following(playbacks, handles, events);
+        this.settingValues = new SettingValuesView(settings, clientThread);
+        this.libraryReader = new LibraryReader(library);
 
         if (options.installTools()) {
             var unused = tools.start();
@@ -270,6 +287,36 @@ public final class MediaPlayerCore implements AutoCloseable {
     /** The pictures of chat links and image windows. */
     public ImageCache images() {
         return images;
+    }
+
+    // ---- The API's side -------------------------------------------------------
+
+    /** What every call into addon code goes through. */
+    public AddonGuard addonGuard() {
+        return addonGuard;
+    }
+
+    /** The addons' say over chat links and what plays. */
+    public Interceptors interceptors() {
+        return interceptors;
+    }
+
+    /** The API's handle of each playback. */
+    public PlaybackHandles handles() {
+        return handles;
+    }
+
+    /** The playback events addons subscribe to. */
+    public MediaEvents mediaEvents() {
+        return mediaEvents;
+    }
+
+    public SettingValuesView settingValues() {
+        return settingValues;
+    }
+
+    public LibraryReader libraryReader() {
+        return libraryReader;
     }
 
     /** Stops everything that belongs to the world the player just left. */

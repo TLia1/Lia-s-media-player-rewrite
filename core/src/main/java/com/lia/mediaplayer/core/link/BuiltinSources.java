@@ -1,6 +1,7 @@
 package com.lia.mediaplayer.core.link;
 
 import com.lia.mediaplayer.api.media.MediaKind;
+import com.lia.mediaplayer.api.source.CollectionSource;
 import com.lia.mediaplayer.api.source.LinkSource;
 import com.lia.mediaplayer.api.source.MediaRef;
 import com.lia.mediaplayer.api.text.Text;

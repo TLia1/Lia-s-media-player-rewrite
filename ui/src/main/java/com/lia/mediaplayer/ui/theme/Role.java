@@ -1,5 +1,7 @@
 package com.lia.mediaplayer.ui.theme;
 
+import com.lia.mediaplayer.api.ui.ThemeRole;
+
 /**
  * What a colour is for. A widget asks for a role ({@link #ICON_HOVER}, not "yellow"), so a
  * theme changes every place a role is used at once.
@@ -63,5 +65,44 @@ public enum Role {
     /** The cross over a muted speaker. */
     MUTED,
     /** The loading spinner. */
-    SPINNER
+    SPINNER;
+
+    /**
+     * The role an addon's theme names. A switch rather than a lookup by name, so a role added
+     * to the API without one here is a compile error.
+     */
+    public static Role of(ThemeRole role) {
+        return switch (role) {
+            case WINDOW_BG -> WINDOW_BG;
+            case TITLE_BAR_BG -> TITLE_BAR_BG;
+            case CONTROL_BAR_BG -> CONTROL_BAR_BG;
+            case PLACEHOLDER -> PLACEHOLDER;
+            case PANEL_BG -> PANEL_BG;
+            case LIST_BG -> LIST_BG;
+            case ROW_BG -> ROW_BG;
+            case ROW_HOVER -> ROW_HOVER;
+            case ROW_SELECTED -> ROW_SELECTED;
+            case FIELD_BG -> FIELD_BG;
+            case CHIP_BG -> CHIP_BG;
+            case CHIP_HOVER -> CHIP_HOVER;
+            case BANNER_BG -> BANNER_BG;
+            case BORDER -> BORDER;
+            case BORDER_FOCUSED -> BORDER_FOCUSED;
+            case TRACK -> TRACK;
+            case FILL -> FILL;
+            case KNOB -> KNOB;
+            case SCROLL_TRACK -> SCROLL_TRACK;
+            case SCROLL_THUMB -> SCROLL_THUMB;
+            case TEXT -> TEXT;
+            case TEXT_SUBTLE -> TEXT_SUBTLE;
+            case TEXT_DIM -> TEXT_DIM;
+            case ICON -> ICON;
+            case ICON_HOVER -> ICON_HOVER;
+            case ICON_ACTIVE -> ICON_ACTIVE;
+            case ICON_DISABLED -> ICON_DISABLED;
+            case DANGER -> DANGER;
+            case MUTED -> MUTED;
+            case SPINNER -> SPINNER;
+        };
+    }
 }

@@ -6,6 +6,7 @@ import com.lia.mediaplayer.api.source.ResolveOptions;
 import com.lia.mediaplayer.api.source.ResolvedMedia;
 import com.lia.mediaplayer.api.source.Resolver;
 import com.lia.mediaplayer.api.source.StreamUrl;
+import com.lia.mediaplayer.core.ModInfo;
 import com.lia.mediaplayer.core.link.BuiltinSources;
 import java.io.IOException;
 import java.net.URI;
@@ -27,6 +28,11 @@ public final class GiphyResolver implements Resolver {
 
     public GiphyResolver(InstantSource clock) {
         this.clock = clock;
+    }
+
+    @Override
+    public String id() {
+        return ModInfo.MOD_ID + ":giphy";
     }
 
     @Override

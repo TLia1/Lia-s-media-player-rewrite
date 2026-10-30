@@ -41,6 +41,6 @@ tasks.check {
 // ---------------------------------------------------------------------------
 tasks.register("verifyModules") {
     group = "verification"
-    description = "Checks the plain Java modules: tests, coverage, layering, formatting, guards."
-    dependsOn(":api:check", ":core:check", ":ui:check", checkVersionGuards)
+    description = "Checks the plain Java modules and builds the example addon: tests, coverage, layering, formatting, guards."
+    dependsOn(":api:check", ":core:check", ":ui:check", ":example-addon:build", checkVersionGuards)
 }

@@ -34,11 +34,20 @@ repositories {
 @Suppress("UNCHECKED_CAST")
 val bundledSourceSets = extra["bundledSourceSets"] as List<SourceSet>
 
+// `-Plmp.exampleAddon` puts the example addon in the dev client, as a mod of its own.
+val exampleAddon: SourceSet? = if (providers.gradleProperty("lmp.exampleAddon").isPresent) {
+    evaluationDependsOn(":example-addon")
+    project(":example-addon").extensions.getByType<SourceSetContainer>().named("main").get()
+} else {
+    null
+}
+
 dependencies {
     // The class folders themselves rather than the module jars: the `mods` block below
     // groups them with this project's classes into one mod. A jar of the same packages
     // beside them would be a second module and a split-package error at launch.
     runtimeOnly(files(bundledSourceSets.map { it.output }))
+    exampleAddon?.let { runtimeOnly(files(it.output)) }
 }
 
 neoForge {
@@ -56,6 +65,7 @@ neoForge {
             sourceSet(sourceSets.main.get())
             bundledSourceSets.forEach { sourceSet(it) }
         }
+        exampleAddon?.let { addon -> create("exampleaddon") { sourceSet(addon) } }
     }
 
     runs {

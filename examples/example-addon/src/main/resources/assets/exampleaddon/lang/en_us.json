@@ -1,0 +1,8 @@
+{
+  "action.exampleaddon.restart": "Restart (Shift: and play)",
+  "key.exampleaddon.restart": "Restart the front player",
+  "settings.exampleaddon.group.general": "Example addon",
+  "settings.exampleaddon.restart_button": "Restart button",
+  "settings.exampleaddon.restart_button.description": "Show the example addon's restart button on video windows and audio bars.",
+  "theme.exampleaddon.sunset": "Sunset"
+}

@@ -361,6 +361,11 @@ class PlayerIntegrationTest {
         String expired = server.fail("/expired.mkv", 403);
         Resolver expiring = new Resolver() {
             @Override
+            public String id() {
+                return "test:expiring";
+            }
+
+            @Override
             public boolean handles(MediaRef ref) {
                 return ref.sourceId().equals("test:expiring");
             }

@@ -1,7 +1,11 @@
 package com.lia.mediaplayer.ui;
 
+import com.lia.mediaplayer.api.LiasMediaPlayerApi.PendingAddon;
+import com.lia.mediaplayer.api.media.MediaHandle;
 import com.lia.mediaplayer.api.media.MediaKind;
+import com.lia.mediaplayer.api.media.MediaRequest;
 import com.lia.mediaplayer.api.media.RepeatMode;
+import com.lia.mediaplayer.api.policy.PlayOrigin;
 import com.lia.mediaplayer.api.settings.ChoiceSetting;
 import com.lia.mediaplayer.api.settings.SettingSpec;
 import com.lia.mediaplayer.api.source.MediaRef;
@@ -13,6 +17,8 @@ import com.lia.mediaplayer.core.playback.PlayerSnapshot;
 import com.lia.mediaplayer.core.playback.PlayerState;
 import com.lia.mediaplayer.core.storage.WindowState;
 import com.lia.mediaplayer.core.text.Keys;
+import com.lia.mediaplayer.ui.addon.UiAddons;
+import com.lia.mediaplayer.ui.addon.UiMediaPlayer;
 import com.lia.mediaplayer.ui.canvas.Canvas;
 import com.lia.mediaplayer.ui.canvas.Rect;
 import com.lia.mediaplayer.ui.command.ShowCommand;
@@ -61,6 +67,9 @@ import org.jspecify.annotations.Nullable;
  * {@link ChatOverlay} also previews picture labels and plays the labels clicked, the chips in
  * the corner open the playlists or bring hidden windows back, and the {@link ShortcutTable}
  * turns keys into transport.
+ *
+ * <p>It also holds the {@linkplain UiAddons addons}, which the platform hands over once at
+ * startup: their themes, buttons, shortcuts and keys join the mod's own.
  */
 public final class MediaPlayerUi implements ClientEvents {
 
@@ -71,6 +80,8 @@ public final class MediaPlayerUi implements ClientEvents {
     private final UiHost host;
     private final LongSupplier nanoTime;
     private final ThemeRegistry themes = new ThemeRegistry();
+    private final ChoiceSetting themeSetting;
+    private final UiAddons addons;
     private final WindowServices services;
     private final WindowManager windows;
     private final PointerTracker pointer = new PointerTracker();
@@ -91,16 +102,23 @@ public final class MediaPlayerUi implements ClientEvents {
         this.core = core;
         this.host = host;
         this.nanoTime = nanoTime;
-        this.services = WindowServices.of(core);
-        ChoiceSetting themeSetting = UiSettings.theme(themes);
+        this.themeSetting = UiSettings.theme(themes);
+        this.addons = new UiAddons(core, themes, addonId -> new UiMediaPlayer(core, this::playFor, addonId));
+        this.services = WindowServices.of(core, addons.windowActions());
         for (SettingSpec<?> spec : UiSettings.all(themeSetting)) {
             if (core.settings().spec(spec.id()).isEmpty()) {
                 core.settings().register(spec);
             }
         }
         this.windows = new WindowManager(new Memory(), () -> core.settings().get(UiSettings.DEFAULT_POSITION));
-        this.show = new ShowCommand(core.sources(), this::play);
-        this.chat = new ChatOverlay(host, core.chat(), core.sources(), core.images(), this::play);
+        this.show = new ShowCommand(
+                core.sources(), (ref, audioOnly, newWindow) -> play(ref, audioOnly, newWindow, PlayOrigin.COMMAND));
+        this.chat = new ChatOverlay(
+                host,
+                core.chat(),
+                core.sources(),
+                core.images(),
+                (ref, audioOnly, newWindow) -> play(ref, audioOnly, newWindow, PlayOrigin.CHAT_CLICK));
         this.chips = new ChatChips(
                 () -> host.openScreenOver(playlistScreen(null)), windows::toggleHidden, windows::hiddenCount);
         var unusedTheme = core.settings().apply(themeSetting, id -> theme = themes.byId(id));
@@ -124,6 +142,20 @@ public final class MediaPlayerUi implements ClientEvents {
         return themes;
     }
 
+    public UiAddons addons() {
+        return addons;
+    }
+
+    /**
+     * Registers the addons, once, at startup: before the platform hands its key mappings to the
+     * game, since the addons' key bindings join them. A theme chosen from an addon is applied now
+     * that it exists.
+     */
+    public void loadAddons(List<PendingAddon> pending) {
+        addons.load(pending);
+        theme = themes.byId(core.settings().get(themeSetting));
+    }
+
     /** Client ticks seen since startup. */
     public long ticks() {
         return ticks;
@@ -135,13 +167,18 @@ public final class MediaPlayerUi implements ClientEvents {
      * Plays {@code ref}: in the front window of its kind, queued after what plays there, or
      * in a new window when there is none, when {@code newWindow} asks for one and the window
      * cap allows it. A picture is pinned in a window of its own, once; a sound, or a list of
-     * sounds, always plays in an audio bar.
+     * sounds, always plays in an audio bar. The addons' interceptors may refuse it first.
+     *
+     * @return the playback it plays or waits in; empty for a picture, or when refused
      */
-    public void play(MediaRef ref, boolean audioOnly, boolean newWindow) {
+    public Optional<PlaybackControl> play(MediaRef ref, boolean audioOnly, boolean newWindow, PlayOrigin origin) {
         core.platform().clientThread().checkCurrent();
+        if (!core.interceptors().allowPlay(ref, origin)) {
+            return Optional.empty();
+        }
         if (ref.kind() == MediaKind.IMAGE) {
             pin(ref);
-            return;
+            return Optional.empty();
         }
         boolean sound = audioOnly || core.sources().playsAs(ref) == MediaKind.AUDIO;
         Class<? extends Window> type = sound ? AudioBar.class : VideoWindow.class;
@@ -150,19 +187,27 @@ public final class MediaPlayerUi implements ClientEvents {
                 count(type) >= core.settings().get(sound ? UiSettings.MAX_AUDIO_WINDOWS : UiSettings.MAX_VIDEO_WINDOWS);
         if (front.isPresent() && (!newWindow || atCap)) {
             Window window = front.get();
-            ((PlayerWindow) window).control().enqueue(ref);
+            PlaybackControl control = ((PlayerWindow) window).control();
+            control.enqueue(ref);
             window.setHidden(false);
             window.raise();
-            return;
+            return Optional.of(control);
         }
-        openPlayer(ref, sound);
+        return Optional.of(openPlayer(ref, sound).control());
+    }
+
+    /** An addon's {@link com.lia.mediaplayer.api.MediaPlayer#play}. */
+    private Optional<MediaHandle> playFor(MediaRef ref, MediaRequest request) {
+        return play(ref, request.audioOnly(), request.newWindow(), PlayOrigin.API)
+                .flatMap(PlaybackControl::handle);
     }
 
     private PlayerWindow openPlayer(MediaRef ref, boolean sound) {
         // The first track already starts at the volume the last window of its kind was left at.
         WindowState remembered = core.windowStates().get(sound ? AudioBar.KIND : VideoWindow.KIND);
         var playback = core.playbacks().open(ref, core.playerOptions(sound).withVolume(remembered.volume()));
-        var control = new CorePlaybackControl(playback, core.playbacks());
+        var control = new CorePlaybackControl(
+                playback, core.playbacks(), Optional.of(core.handles().of(playback)));
         Window window = sound ? new AudioBar(control, services) : new VideoWindow(control, services);
         control.setRepeat(remembered.repeat());
         control.setShuffle(remembered.shuffle());
@@ -178,6 +223,7 @@ public final class MediaPlayerUi implements ClientEvents {
             core.sources()
                     .match(url)
                     .filter(ref -> ref.kind() != MediaKind.IMAGE)
+                    .filter(ref -> core.interceptors().allowPlay(ref, PlayOrigin.PLAYLIST))
                     .ifPresent(refs::add);
         }
         if (refs.isEmpty()) {
@@ -195,8 +241,8 @@ public final class MediaPlayerUi implements ClientEvents {
     }
 
     /** Plays a link as a click on it in chat would, if a source knows it. */
-    public void playUrl(String url, boolean audioOnly, boolean newWindow) {
-        core.sources().match(url.strip()).ifPresent(ref -> play(ref, audioOnly, newWindow));
+    public void playUrl(String url, boolean audioOnly, boolean newWindow, PlayOrigin origin) {
+        core.sources().match(url.strip()).ifPresent(ref -> play(ref, audioOnly, newWindow, origin));
     }
 
     /** Shows a picture in a window, bringing forward the one that already shows it. */
@@ -294,7 +340,7 @@ public final class MediaPlayerUi implements ClientEvents {
 
         @Override
         public void play(String url) {
-            playUrl(url, false, false);
+            playUrl(url, false, false, PlayOrigin.HISTORY);
         }
 
         @Override
@@ -332,6 +378,7 @@ public final class MediaPlayerUi implements ClientEvents {
         ticks++;
         core.images().tick();
         core.playbacks().setMasterVolume(core.platform().masterVolume());
+        core.mediaEvents().tick();
         windows.tick();
         rememberModes();
         announceHiddenTracks();
@@ -424,9 +471,15 @@ public final class MediaPlayerUi implements ClientEvents {
             return true;
         }
         if (stamped instanceof InputEvent.KeyDown key) {
-            return ShortcutTable.actionFor(key.key(), key.mods(), !screen.chatFieldEmpty())
-                    .map(this::shortcut)
-                    .orElse(false);
+            Optional<ShortcutTable.Action> action =
+                    ShortcutTable.actionFor(key.key(), key.mods(), !screen.chatFieldEmpty());
+            if (action.isPresent()) {
+                return shortcut(action.get());
+            }
+            return addons.shortcut(
+                    key.key(),
+                    key.mods(),
+                    frontPlayer().flatMap(p -> p.control().handle()));
         }
         return screen.kind() == ScreenContext.Kind.CHAT
                 && stamped instanceof InputEvent.PointerDown down
@@ -489,7 +542,8 @@ public final class MediaPlayerUi implements ClientEvents {
             case MEDIA_CONTROLS -> toggle(MediaControlsScreen.class, this::openMediaControls);
             case PLAYLISTS -> toggle(PlaylistScreen.class, this::openPlaylists);
             case SETTINGS -> toggle(SettingsScreen.class, this::openSettings);
-            case PLAY_CLIPBOARD -> playUrl(core.platform().clipboard().get(), mods.alt(), mods.shift());
+            case PLAY_CLIPBOARD ->
+                playUrl(core.platform().clipboard().get(), mods.alt(), mods.shift(), PlayOrigin.KEYBIND);
             case TOGGLE_WINDOWS -> windows.toggleHidden();
             case CLOSE_ALL -> windows.closeAll();
             case PLAY_PAUSE -> hotkeyPlayer().ifPresent(p -> p.control().togglePause());
@@ -499,6 +553,11 @@ public final class MediaPlayerUi implements ClientEvents {
             case VOLUME_DOWN -> hotkeyPlayer().ifPresent(p -> transport(p, ShortcutTable.Action.VOLUME_DOWN));
             case MUTE -> hotkeyPlayer().ifPresent(PlayerWindow::toggleMute);
         }
+    }
+
+    @Override
+    public void keyBindingPressed(String id, Mods mods) {
+        addons.keyBindingPressed(id, hotkeyPlayer().flatMap(p -> p.control().handle()));
     }
 
     @Override

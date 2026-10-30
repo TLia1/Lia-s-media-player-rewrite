@@ -403,6 +403,7 @@ public interface ClientEvents {
     boolean input(ScreenContext screen, InputEvent event);       // true = consumed
     void screenOpened(ScreenContext screen, ButtonSink buttons); // built or rebuilt; vanilla buttons go in `buttons` (M4)
     void hotkeyPressed(Hotkey hotkey, Mods mods);                // a mod key mapping, with the modifiers held (M4)
+    void keyBindingPressed(String id, Mods mods);                // an addon's key binding (M5)
     void worldLeft();
     List<ChatLink> chatDisplayed(List<String> runs, @Nullable String sender);  // M3
 }
@@ -526,10 +527,20 @@ Each loader has one entrypoint that builds the `McPlatform`, the
 | Key mappings | `RegisterKeyMappingsEvent` | `KeyMappingHelper` |
 | Client command | `RegisterClientCommandsEvent` | `ClientCommandRegistrationCallback` |
 | Config screen button | `IConfigScreenFactory` | ModMenu entrypoint |
-| Addon discovery | `LiasMediaPlayer.registerAddon(...)` from the addon's `@Mod` constructor | `"liasmediaplayer"` entrypoint + the same method |
+| Addon discovery | `LiasMediaPlayerApi.registerAddon(id, addon)` from the addon's `@Mod` constructor | `"liasmediaplayer"` entrypoint + the same method |
 
 The bridges contain no decisions. Translating "consumed" into `setCanceled(true)` or
 `return false` is all they do.
+
+Settled in M5: the addons are registered at the moment each loader collects key mappings, so
+their key bindings are among them. On NeoForge that is `RegisterKeyMappingsEvent`, which
+NeoForge posts from `ClientHooks.initClientHooks` after every mod is constructed: an addon's
+`@Mod` constructor may run before or after the mod's own, and `registerAddon` only queues it.
+On Fabric it is the mod's own `onInitializeClient`, which reads every `"liasmediaplayer"`
+entrypoint (the provider's mod id is the addon's id) before calling `KeyBindingHelper`. Both
+then call `ModBootstrap.loadAddons`; `registerAddon` refuses from that moment on. Fabric starts
+mods before Minecraft records its game thread, so loading addons does not assert the client
+thread; the ready callbacks are posted to it.
 
 ---
 
@@ -579,7 +590,8 @@ public interface LinkSource {
   `TimestampLinks` for "copy at the current time". Settled in M4: `core.link.ShareLinks`
   decides from `MediaRef.sourceId()` (YouTube `t=`/`start=`, Twitch `1h02m03s`, Vimeo and
   SoundCloud fragments); the capability interface an addon source implements comes with
-  the API in M5.
+  the API in M5. (M5: `api.source.TimestampLinks`, asked through `SourceRegistry.linkAt` for the
+  refs its source claimed; `CollectionSource` moved into the API beside it.)
 
 ### 6.3 Resolution
 
@@ -1224,6 +1236,56 @@ public sealed interface MediaEvent {
   `snapshot()`) are safe from any thread; anything that changes state must run on the
   client thread and throws `WrongThreadException` otherwise, instead of misbehaving.
 
+### Settled in M5
+
+What 4.0.0 has, and where it differs from the sketch above:
+
+- **Registries.** `AddonContext` has the sketch's registries less `imageDecoders()` and
+  `screenEntries()`, which wait for the engine features behind them. Adding a method to
+  `AddonContext` later breaks no addon, since only the mod implements it. Each registry checks
+  that an id's owner is the addon's id and that the id is free, and closes when `register`
+  returns; `onReady` likewise. The ids `liasmediaplayer`, `liasmediaplayerapi` and `minecraft`
+  cannot be addon ids. An exception thrown by `register` is logged, and what was registered
+  before it stays.
+- **`registerAddon(addonId, addon)`** takes the id: the API cannot ask the loader which mod is
+  being constructed. `LiasMediaPlayerApi` keeps the addons handed over until the mod takes them
+  (`takePending`), the API's only state and the third static of the mod, beside the
+  entrypoints' reference and `McChat`'s.
+- **`Resolver` gained `id()`**, so the guard and the logs can name it.
+- **Sources.** An addon's source is asked before the built-ins of its priority, and the refs it
+  returns carry its own id whatever they claim, so an addon cannot pass its links off as a
+  built-in site's. A video or audio ref no resolver takes goes to yt-dlp, so a source for a site
+  yt-dlp knows needs no resolver; the example addon's Internet Archive source is one.
+- **`MediaPlayer`** is handed to each addon's `onReady` separately, so the listeners an addon
+  subscribes through it count against that addon in the guard. `play(MediaRequest)` returns an
+  `Optional<MediaHandle>`: empty for a picture (pinned, with no playback), a link no source
+  claims, or an interceptor's refusal. `MediaRequest` is `(url, audioOnly, newWindow)` — v2's
+  placement, sizing and chrome need the window API that surfaces bring. The library view is read
+  only.
+- **Handles.** `core.addon.PlaybackHandles` keeps one handle per playback, so handles compare
+  by identity. The read side goes through the playback's volatile current player and the
+  player's published snapshot; the controls check the thread and throw `WrongThreadException`.
+- **Events** are translated from the engine's states in `core.addon.MediaEvents`, through a
+  `PlaybackRegistry.Listener` (track started, state changed, closed) that replaced the single
+  track listener: the first `Playing` of a track is `Started`, `Playing` after `Paused` is
+  `Resumed`, and a seek goes from the position read at the last client tick.
+- **UI extensions.** `WindowAction.onClick(MediaWindow, shift)`: the button is told about the
+  window (its kind, link and handle) rather than a handle alone, so it can be on a picture
+  window too. `ShortcutSpec` is Ctrl (Cmd) with a letter or digit, so "an unmodified letter or
+  digit" cannot be expressed at all; `KeyBindingSpec` names its translation key, which the game
+  also uses as the mapping's id. Addon themes are `ThemeSpec` over `ThemeRole`, mapped to the
+  UI's `Role` by an exhaustive switch.
+- **Interceptors** have `allowChatLink` and `allowPlay`. v2's request rewriting and label
+  decoration are not in 4.0.
+- **`Capability`** names every planned feature; `IMAGE_DECODERS`, `SCREEN_ENTRIES`,
+  `SURFACES`, `HEADLESS_AUDIO`, `POSITIONAL_AUDIO`, `SYNC` and `DIAGNOSTICS` answer `false` until
+  the engine work behind them lands. The engine has no mixer, surface or sync service yet;
+  they are API work for after M7, each a minor version.
+- **The example addon** (`examples/example-addon`) is a plain Java library against `:api`, with
+  `fabric.mod.json`, `neoforge.mods.toml` and one `@Mod` class compiled against two FML
+  annotation jars. One jar loads on both loaders. `verifyModules` builds and tests it, and
+  `-Plmp.exampleAddon` adds it to either development client.
+
 ### 11.2 Kept from API 3.x
 
 `MediaRequest` (placement, sizing, chrome, origin, shuffle, repeat), queue editing,
@@ -1237,6 +1299,8 @@ carry over; only the signatures change where Minecraft types are removed.
 - API version 4.0.0. Semantic versioning. The API's own `@since` tags start at 4.0.
 - `api` has a binary-compatibility check in CI (for example `japicmp` against the
   last release), so an accidental breaking change fails the build.
+  Settled in M5: not wired yet, since there is no released 4.0.0 to compare against; it comes
+  with the first published API jar.
 - `Capability` flags (v2) stay, for features that depend on the target (for example,
   positional audio through OpenAL once it exists).
 
@@ -1280,6 +1344,9 @@ Tools to measure:
 - Every call into addon code goes through `AddonGuard.run(addonId, …)`, which logs
   the exception with the addon id once per call site, and after a configurable
   number of failures disables that registration with a warning.
+  Settled in M5: the guard (`core.addon.AddonGuard`) counts per registration id, whose owner is
+  the addon, logs the first failure with its stack trace, and disables the registration after
+  10; a disabled source finds nothing, an interceptor allows, a button hides.
 - Logging through SLF4J (on Minecraft's classpath). One logger per class. No logging
   inside the audio pump or the render loop; counters instead, shown by the debug
   overlay.
@@ -1471,7 +1538,7 @@ Each milestone ends with something that runs.
 | M2 | `ui` toolkit + `Canvas` + `McCanvas`/`McTextures` + `HostScreen`; `VideoWindow`, `AudioBar` | A video plays in a window in game, from the `/show` command. |
 | M3 | Chat: display-time mixin, `ChatRewriter`, labels, hover preview, click routing, filters; images and GIFs; image windows | Every v2 link type works from chat. |
 | M4 | Library and settings: playlists, history, settings screen, themes, window state, keybinds, shortcuts, media controls screen, v2 import | Feature parity with v2 for players. Done, short of three things listed in the README. |
-| M5 | API v4, addon entry points on both loaders, an example addon in the repository, API docs and porting guide | The example addon registers a source, a theme and a window button on both loaders. |
+| M5 | API v4, addon entry points on both loaders, an example addon in the repository, API docs and porting guide | The example addon registers a source, a theme and a window button on both loaders. Done; the parts of v2's API that need engine work wait behind `Capability` flags (§11, settled in M5). |
 | M6 | Version matrix: add 1.21.11 and the latest 26.x on both loaders (§20, decision 1) | All targets build and pass the smoke test. |
 | M7 | Performance pass with JFR and the debug overlay; disk cache; ffmpeg image fallback; polish | Budget in §12 met on a mid-range machine. |
 

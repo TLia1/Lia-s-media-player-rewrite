@@ -3,13 +3,15 @@ package com.lia.mediaplayer.ui.windows;
 import com.lia.mediaplayer.api.media.MediaKind;
 import com.lia.mediaplayer.api.source.MediaRef;
 import com.lia.mediaplayer.api.text.Text;
-import com.lia.mediaplayer.core.link.ShareLinks;
+import com.lia.mediaplayer.api.ui.MediaWindow;
 import com.lia.mediaplayer.core.text.Keys;
 import com.lia.mediaplayer.ui.icon.Glyphs;
 import com.lia.mediaplayer.ui.input.Mods;
 import com.lia.mediaplayer.ui.widget.IconButton;
 import java.time.Duration;
 import java.util.Optional;
+import java.util.function.BiConsumer;
+import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
 /**
@@ -20,6 +22,13 @@ import java.util.function.Supplier;
 final class CornerButtons {
 
     private CornerButtons() {}
+
+    /** Adds the addons' buttons, the first in the row, to a window that {@code window} describes. */
+    static void addonButtons(AddonActions actions, MediaWindow window, BiConsumer<IconButton, BooleanSupplier> add) {
+        for (AddonActions.Button button : actions.buttons(window)) {
+            add.accept(button.button(), button.shown());
+        }
+    }
 
     /** The heart: keeps the link in the history for good. */
     static IconButton favorite(Supplier<Optional<MediaRef>> current, MediaKind kind, WindowServices services) {
@@ -43,7 +52,9 @@ final class CornerButtons {
                         Glyphs::copy,
                         (Mods mods) -> current.get().ifPresent(ref -> {
                             String link = mods.shift()
-                                    ? ShareLinks.atTime(ref, position.get()).orElse(ref.url())
+                                    ? services.linkAt()
+                                            .apply(ref, position.get())
+                                            .orElse(ref.url())
                                     : ref.url();
                             services.platform().clipboard().set(link);
                         }))

@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "exampleaddon",
+  "version": "${version}",
+  "name": "Lia's Media Player example addon",
+  "description": "Shows the API of Lia's Media Player: an Internet Archive link source, a theme, and a restart button.",
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "liasmediaplayer": [
+      "com.example.lmpaddon.ExampleAddon"
+    ]
+  },
+  "depends": {
+    "liasmediaplayerapi": "*"
+  }
+}

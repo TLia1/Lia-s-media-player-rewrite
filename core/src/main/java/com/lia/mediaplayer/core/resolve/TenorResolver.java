@@ -7,6 +7,7 @@ import com.lia.mediaplayer.api.source.ResolvedMedia;
 import com.lia.mediaplayer.api.source.Resolver;
 import com.lia.mediaplayer.api.source.StreamUrl;
 import com.lia.mediaplayer.api.source.WebUrls;
+import com.lia.mediaplayer.core.ModInfo;
 import com.lia.mediaplayer.core.link.BuiltinSources;
 import com.lia.mediaplayer.core.net.Http;
 import java.io.IOException;
@@ -63,6 +64,11 @@ public final class TenorResolver implements Resolver {
         this.http = http;
         this.io = io;
         this.clock = clock;
+    }
+
+    @Override
+    public String id() {
+        return ModInfo.MOD_ID + ":tenor";
     }
 
     @Override

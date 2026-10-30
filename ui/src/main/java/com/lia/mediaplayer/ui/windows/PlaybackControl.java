@@ -1,5 +1,6 @@
 package com.lia.mediaplayer.ui.windows;
 
+import com.lia.mediaplayer.api.media.MediaHandle;
 import com.lia.mediaplayer.api.media.RepeatMode;
 import com.lia.mediaplayer.api.source.MediaRef;
 import com.lia.mediaplayer.core.playback.PlayerSnapshot;
@@ -89,6 +90,11 @@ public interface PlaybackControl {
     void enqueue(MediaRef ref);
 
     boolean isClosed();
+
+    /** The API's handle on this playback, for the addons' buttons; empty where there is none. */
+    default Optional<MediaHandle> handle() {
+        return Optional.empty();
+    }
 
     /** Stops playback for good and releases the process, the sound line and the frames. */
     void close();

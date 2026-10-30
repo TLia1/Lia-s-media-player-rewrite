@@ -43,6 +43,12 @@ dependencies {
     // In the dev client the plain modules are ordinary libraries on the classpath; in
     // the released jar their classes are merged in (see lmp.platform-common).
     runtimeOnly(project(":ui"))
+
+    // `-Plmp.exampleAddon` puts the example addon in the dev client: Fabric finds it by the
+    // fabric.mod.json in its jar, as it would in the mods folder.
+    if (providers.gradleProperty("lmp.exampleAddon").isPresent) {
+        runtimeOnly(project(":example-addon"))
+    }
 }
 
 tasks.withType<ProcessResources>().configureEach {

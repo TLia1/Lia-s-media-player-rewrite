@@ -5,6 +5,7 @@ import com.lia.mediaplayer.api.source.MediaRef;
 import com.lia.mediaplayer.api.source.ResolveOptions;
 import com.lia.mediaplayer.api.source.ResolvedMedia;
 import com.lia.mediaplayer.api.source.Resolver;
+import com.lia.mediaplayer.core.ModInfo;
 import com.lia.mediaplayer.core.link.BuiltinSources;
 import com.lia.mediaplayer.core.tools.ProcessResult;
 import com.lia.mediaplayer.core.tools.ProcessRunner;
@@ -68,6 +69,11 @@ public final class YtDlpResolver implements Resolver {
     }
 
     /** Everything that plays and is not a direct file: yt-dlp is the fallback extractor. */
+    @Override
+    public String id() {
+        return ModInfo.MOD_ID + ":yt_dlp";
+    }
+
     @Override
     public boolean handles(MediaRef ref) {
         return (ref.kind() == MediaKind.VIDEO || ref.kind() == MediaKind.AUDIO)

@@ -20,6 +20,7 @@ import com.lia.mediaplayer.ui.widget.Size;
 import com.lia.mediaplayer.ui.widget.Widget;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.BooleanSupplier;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -58,6 +59,7 @@ public abstract class Window extends Container {
     private final Label titleLabel;
     private final Animation focus = new Animation(0, FOCUS_FADE_NANOS, Easing.OUT_CUBIC);
     private final List<Widget> popups = new ArrayList<>();
+    private final List<ShownWhen> conditional = new ArrayList<>();
     private @Nullable WindowManager manager;
     private boolean placed;
     private boolean layoutDirty = true;
@@ -118,6 +120,17 @@ public abstract class Window extends Container {
     protected final IconButton addTitleButton(IconButton button) {
         return titleBar.add(button);
     }
+
+    /**
+     * {@link #addTitleButton(IconButton)} for a button that shows only while {@code shownWhen}
+     * holds, asked before every frame: an addon's button, which says which windows it is for.
+     */
+    protected final IconButton addTitleButton(IconButton button, BooleanSupplier shownWhen) {
+        conditional.add(new ShownWhen(button, shownWhen));
+        return titleBar.add(button);
+    }
+
+    private record ShownWhen(Widget widget, BooleanSupplier condition) {}
 
     /** Sets the body below the title strip. Call once, from the subclass constructor. */
     protected final <W extends Widget> W setBody(W body) {
@@ -214,6 +227,11 @@ public abstract class Window extends Container {
 
     /** Refreshes the window's state and lays it out again if anything asked for it. Before each draw. */
     public final void layoutIfNeeded(Constraints constraints) {
+        // By index: this runs every frame, and an iterator would be garbage every frame.
+        for (int i = 0; i < conditional.size(); i++) {
+            ShownWhen shown = conditional.get(i);
+            shown.widget().setVisible(shown.condition().getAsBoolean());
+        }
         beforeLayout();
         if (!layoutDirty) {
             return;

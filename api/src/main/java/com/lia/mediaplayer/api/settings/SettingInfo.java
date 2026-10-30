@@ -1,8 +1,8 @@
 package com.lia.mediaplayer.api.settings;
 
+import com.lia.mediaplayer.api.Ids;
 import com.lia.mediaplayer.api.text.Text;
 import java.util.Optional;
-import java.util.regex.Pattern;
 
 /**
  * What every setting has, whatever its type.
@@ -16,15 +16,9 @@ import java.util.regex.Pattern;
  */
 public record SettingInfo(String id, String group, Text label, Optional<Text> description, Optional<Text> warning) {
 
-    private static final Pattern NAMESPACED = Pattern.compile("[a-z0-9_.-]+:[a-z0-9_./-]+");
-
     public SettingInfo {
-        if (!NAMESPACED.matcher(id).matches()) {
-            throw new IllegalArgumentException("Setting id must be namespaced, like owner:name — was " + id);
-        }
-        if (!NAMESPACED.matcher(group).matches()) {
-            throw new IllegalArgumentException("Setting group must be namespaced, like owner:name — was " + group);
-        }
+        Ids.require(id, "Setting id");
+        Ids.require(group, "Setting group");
     }
 
     /** A setting with a label and nothing else. */

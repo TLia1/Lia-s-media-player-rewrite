@@ -3,6 +3,7 @@ package com.lia.mediaplayer.core.link;
 import com.lia.mediaplayer.api.media.MediaKind;
 import com.lia.mediaplayer.api.source.MediaRef;
 import com.lia.mediaplayer.api.text.Text;
+import com.lia.mediaplayer.core.policy.Interceptors;
 import com.lia.mediaplayer.core.policy.LinkFilter;
 import com.lia.mediaplayer.core.text.Keys;
 import java.util.ArrayList;
@@ -19,7 +20,8 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>The platform hands over the message as its styled runs of plain text and gets back the
  * spans to replace; it keeps every style it does not need to change. A link becomes a label
- * when a source claims it and the player's {@link LinkFilter} allows its sender and its host.
+ * when a source claims it, the player's {@link LinkFilter} allows its sender and its host, and
+ * no addon's interceptor refuses it.
  * Nothing is fetched here: a link is only read once the player hovers or clicks it.
  *
  * <p>The rewriter remembers the links it labelled, and the UI acts only on those. A click on
@@ -36,6 +38,7 @@ public final class ChatRewriter {
     private static final int GREEN = 0x55FF55;
 
     private final SourceRegistry sources;
+    private final Interceptors interceptors;
     private volatile LinkFilter filter = LinkFilter.NONE;
     private final Set<String> labelled = Collections.newSetFromMap(Collections.synchronizedMap(new LinkedHashMap<>() {
         @Override
@@ -45,7 +48,12 @@ public final class ChatRewriter {
     }));
 
     public ChatRewriter(SourceRegistry sources) {
+        this(sources, new Interceptors());
+    }
+
+    public ChatRewriter(SourceRegistry sources, Interceptors interceptors) {
         this.sources = sources;
+        this.interceptors = interceptors;
     }
 
     /** Replaces the filter; messages shown from now on follow it. */
@@ -77,7 +85,7 @@ public final class ChatRewriter {
                     continue;
                 }
                 Optional<MediaRef> ref = sources.match(span.url());
-                if (ref.isEmpty()) {
+                if (ref.isEmpty() || !interceptors.allowChatLink(ref.get(), sender)) {
                     continue;
                 }
                 if (links.isEmpty()) {

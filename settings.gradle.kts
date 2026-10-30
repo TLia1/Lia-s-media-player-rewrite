@@ -27,6 +27,10 @@ rootProject.name = "lias-media-player"
 // Plain Java modules: compiled once, no Minecraft on their classpath.
 include("api", "core", "ui")
 
+// An addon, built the way one outside the repository would be: against the API alone.
+include("example-addon")
+project(":example-addon").projectDir = file("examples/example-addon")
+
 // The only Minecraft- and loader-specific code. Stonecutter builds one subproject per
 // Minecraft version and loader (platform/versions/<mc>-<loader>), all sharing platform/src.
 // This is the only place the matrix is declared.

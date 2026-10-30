@@ -44,6 +44,9 @@ public interface ClientEvents {
     /** A key mapping of the mod was pressed, in the world or over a screen, with {@code mods} held. */
     void hotkeyPressed(Hotkey hotkey, Mods mods);
 
+    /** An addon's key binding of id {@code id} was pressed, where a hotkey would have been. */
+    void keyBindingPressed(String id, Mods mods);
+
     /**
      * A chat message is about to be shown. The platform hands over its text split where its
      * style changes, and replaces the returned spans with labels; an empty answer — almost

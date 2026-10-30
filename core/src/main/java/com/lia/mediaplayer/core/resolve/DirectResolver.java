@@ -7,6 +7,7 @@ import com.lia.mediaplayer.api.source.ResolveOptions;
 import com.lia.mediaplayer.api.source.ResolvedMedia;
 import com.lia.mediaplayer.api.source.Resolver;
 import com.lia.mediaplayer.api.source.StreamUrl;
+import com.lia.mediaplayer.core.ModInfo;
 import com.lia.mediaplayer.core.link.BuiltinSources;
 import java.time.Duration;
 import java.time.InstantSource;
@@ -27,6 +28,11 @@ public final class DirectResolver implements Resolver {
 
     public DirectResolver(InstantSource clock) {
         this.clock = clock;
+    }
+
+    @Override
+    public String id() {
+        return ModInfo.MOD_ID + ":direct";
     }
 
     @Override

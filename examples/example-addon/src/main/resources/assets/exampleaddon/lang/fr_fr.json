@@ -1,0 +1,8 @@
+{
+  "action.exampleaddon.restart": "Recommencer (Maj : et lire)",
+  "key.exampleaddon.restart": "Recommencer le lecteur au premier plan",
+  "settings.exampleaddon.group.general": "Addon d'exemple",
+  "settings.exampleaddon.restart_button": "Bouton Recommencer",
+  "settings.exampleaddon.restart_button.description": "Affiche le bouton Recommencer de l'addon d'exemple sur les fenêtres vidéo et les barres audio.",
+  "theme.exampleaddon.sunset": "Coucher de soleil"
+}

@@ -3,7 +3,9 @@ package com.lia.mediaplayer.ui.theme;
 import static java.util.Map.entry;
 
 import com.lia.mediaplayer.api.text.Text;
+import com.lia.mediaplayer.api.ui.ThemeSpec;
 import com.lia.mediaplayer.core.ModInfo;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 
@@ -149,6 +151,13 @@ public final class Themes {
     /** The built-in themes, in the order the setting cycles them. */
     public static List<Theme> all() {
         return List.of(DARK, CONTRAST, MINECRAFT, LIGHT);
+    }
+
+    /** An addon's theme: the dark one with the roles it names. */
+    public static Theme from(ThemeSpec spec) {
+        var overrides = new EnumMap<Role, Integer>(Role.class);
+        spec.colors().forEach((role, color) -> overrides.put(Role.of(role), color));
+        return DARK.with(spec.id(), spec.name(), overrides);
     }
 
     private static String id(String name) {

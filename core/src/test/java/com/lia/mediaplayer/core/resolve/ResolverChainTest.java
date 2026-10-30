@@ -35,6 +35,11 @@ class ResolverChainTest {
         final List<CompletableFuture<ResolvedMedia>> calls = new ArrayList<>();
 
         @Override
+        public String id() {
+            return "test:manual";
+        }
+
+        @Override
         public boolean handles(MediaRef ref) {
             return ref.sourceId().equals("test:site");
         }
@@ -121,6 +126,11 @@ class ResolverChainTest {
                 .hasMessageContaining("No resolver");
 
         Resolver broken = new Resolver() {
+            @Override
+            public String id() {
+                return "test:broken";
+            }
+
             @Override
             public boolean handles(MediaRef ref) {
                 throw new IllegalStateException("bug in an addon");

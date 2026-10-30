@@ -27,7 +27,8 @@ public final class PlaybackRegistry implements AutoCloseable {
     private final RandomGenerator random;
     private final List<Playback> playbacks = new ArrayList<>();
     private final AtomicLong ids = new AtomicLong();
-    private final List<BiConsumer<Playback, MediaRef>> trackListeners = new CopyOnWriteArrayList<>();
+    private final List<Listener> listeners = new CopyOnWriteArrayList<>();
+    private final Listener owner = new Owner();
     private float masterVolume = 1;
 
     public PlaybackRegistry(
@@ -44,8 +45,7 @@ public final class PlaybackRegistry implements AutoCloseable {
      */
     public Playback open(MediaRef ref, PlayerOptions options) {
         clientThread.checkCurrent();
-        var playback =
-                new Playback(ids.incrementAndGet(), engine, options, random, playbacks::remove, this::trackStarted);
+        var playback = new Playback(ids.incrementAndGet(), engine, options, random, owner);
         playback.setMasterVolume(masterVolume);
         playbacks.add(playback);
         if (ref.kind() == MediaKind.COLLECTION) {
@@ -91,15 +91,68 @@ public final class PlaybackRegistry implements AutoCloseable {
      * kind of owner.
      */
     public void onTrackStarted(BiConsumer<Playback, MediaRef> listener) {
-        trackListeners.add(listener);
+        addListener(new Listener() {
+            @Override
+            public void trackStarted(Playback playback, MediaRef ref) {
+                listener.accept(playback, ref);
+            }
+        });
     }
 
-    private void trackStarted(Playback playback, MediaRef ref) {
-        for (var listener : trackListeners) {
-            try {
-                listener.accept(playback, ref);
-            } catch (RuntimeException e) {
-                LOGGER.error("Track listener failed on {}", ref.url(), e);
+    /** Tells {@code listener} what every playback does from now on, on the client thread. */
+    public void addListener(Listener listener) {
+        listeners.add(listener);
+    }
+
+    /**
+     * What happens to the playbacks: a track starting, the current player changing state, a
+     * playback closing. Each method is a no-op unless overridden; one that throws is logged.
+     */
+    public interface Listener {
+
+        /** {@code playback} started {@code ref}: the first track, the next one, a jump in its queue. */
+        default void trackStarted(Playback playback, MediaRef ref) {}
+
+        /** The current player of {@code playback} changed state. */
+        default void stateChanged(Playback playback, PlayerState state) {}
+
+        /** {@code playback} closed, and is no longer in {@link #playbacks()}. */
+        default void closed(Playback playback) {}
+    }
+
+    /** What the playbacks report to: keeps the list, and fans out to the listeners. */
+    private final class Owner implements Listener {
+        @Override
+        public void trackStarted(Playback playback, MediaRef ref) {
+            for (Listener listener : listeners) {
+                try {
+                    listener.trackStarted(playback, ref);
+                } catch (RuntimeException e) {
+                    LOGGER.error("Track listener failed on {}", ref.url(), e);
+                }
+            }
+        }
+
+        @Override
+        public void stateChanged(Playback playback, PlayerState state) {
+            for (Listener listener : listeners) {
+                try {
+                    listener.stateChanged(playback, state);
+                } catch (RuntimeException e) {
+                    LOGGER.error("Playback listener failed on {}", state, e);
+                }
+            }
+        }
+
+        @Override
+        public void closed(Playback playback) {
+            playbacks.remove(playback);
+            for (Listener listener : listeners) {
+                try {
+                    listener.closed(playback);
+                } catch (RuntimeException e) {
+                    LOGGER.error("Playback listener failed on close", e);
+                }
             }
         }
     }

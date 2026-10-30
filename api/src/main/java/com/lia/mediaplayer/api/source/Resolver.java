@@ -8,6 +8,9 @@ import java.util.concurrent.CompletableFuture;
  */
 public interface Resolver {
 
+    /** Namespaced, e.g. {@code "liasmediaplayer:yt_dlp"}. Names the resolver in logs. */
+    String id();
+
     /** Whether this resolver takes {@code ref}. Cheap, no IO, thread-safe. */
     boolean handles(MediaRef ref);
 

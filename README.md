@@ -1,9 +1,9 @@
 # Lia's Media Player — v3
 
 A rewrite of Lia's Media Player. The design, the reasons behind it and the milestones are
-in [REWRITE-DESIGN.md](REWRITE-DESIGN.md). This repository is at **milestone M4**: on top of
-the headless engine of M1, the windows of M2 and the chat links of M3, the player has v2's
-library and settings back.
+in [REWRITE-DESIGN.md](REWRITE-DESIGN.md). This repository is at **milestone M5**: on top of
+the headless engine of M1, the windows of M2, the chat links of M3 and the library and settings
+of M4, addons are back, through API 4.
 
 - **Playlists** (the "Playlists" chip over the chat, or its key): create, rename, search,
   add links (a YouTube playlist or SoundCloud set is expanded into its tracks), drag entries
@@ -25,11 +25,19 @@ library and settings back.
   Space, ←/→ (Shift: further) while nothing is typed, Ctrl+M/L/S/N/P/F/↑/↓ always.
 - **Upgrading from v2**: the first start imports v2's `config.json`, `playlists.json`,
   `history.json` and `windows.json`, and keeps them as `*.v2.bak`.
+- **Addons** (API 4, Minecraft-free): one `MediaPlayerAddon` per addon, found through the
+  `liasmediaplayer` entrypoint on Fabric and `LiasMediaPlayerApi.registerAddon` on NeoForge. They
+  add link sources, resolvers, themes, buttons on the windows, Ctrl+key shortcuts, key bindings,
+  settings and interceptors, listen to playback events, and play links through handles. The
+  [API guide](docs/API.md), the [porting guide from 3.x](docs/PORTING.md), and an
+  [example addon](examples/example-addon) that is one jar for both loaders.
 
 Not yet at parity: v2's ±10 s buttons on the video window (the arrow keys seek), thumbnails
 in the playlist and history lists (titles are there; pictures come with the disk cache of
 M7), and the "sound only when hidden" setting (§20, decision 6; hidden players keep
-decoding, as in v2).
+decoding, as in v2). Of v2's API, surfaces, sound with no window, positional sound, the
+watch-together hooks, picture decoders, screen tabs and the counters are not back yet; each has a
+`Capability` that says so (see the [API guide](docs/API.md#versions-and-capabilities)).
 
 ## Trying it in game
 
@@ -62,6 +70,8 @@ the machine.
 | `core/` | The engine: links, resolution, tools, playback, library, settings | No |
 | `ui/` | The mod's own UI toolkit (widgets, layout, input, themes), the windows, and the screens, drawn through a `Canvas` | No |
 | `platform/` | Adapters to the game (`mc/`) and the two loader entrypoints (`fabric/`, `neoforge/`) | Yes |
+| `examples/example-addon/` | An addon built against the API alone, one jar for both loaders | No |
+| `docs/` | The API guide and the porting guide | — |
 | `build-logic/` | Gradle convention plugins | — |
 
 `api`, `core` and `ui` are compiled once for Java 21 and merged into every mod jar.
@@ -83,7 +93,7 @@ Rules the build enforces:
 ```
 
 Runs the tests, coverage, formatting check, layering tests and guard check of the plain
-modules. Needs no Minecraft and takes seconds.
+modules, and builds and tests the example addon. Needs no Minecraft and takes seconds.
 
 The integration tests (tagged `integration`) run real ffmpeg on media they generate, served
 by a local HTTP server; they need `ffmpeg` and `ffprobe` on `PATH` (or
@@ -119,7 +129,8 @@ Builds every target; jars land in `platform/versions/<target>/build/libs/`.
 ./gradlew :platform:1.21.1-fabric:runClient
 ```
 
-Starts a development client (use `1.21.1-neoforge:runClient` for NeoForge).
+Starts a development client (use `1.21.1-neoforge:runClient` for NeoForge). Add
+`-Plmp.exampleAddon` to load the example addon in it as well.
 
 The matrix is declared once, in `settings.gradle.kts`. Per-version dependencies live in
 `platform/stonecutter.properties.toml`; tool and library versions in

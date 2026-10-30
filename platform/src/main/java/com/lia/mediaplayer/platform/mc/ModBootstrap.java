@@ -1,5 +1,6 @@
 package com.lia.mediaplayer.platform.mc;
 
+import com.lia.mediaplayer.api.LiasMediaPlayerApi.PendingAddon;
 import com.lia.mediaplayer.api.text.Text;
 import com.lia.mediaplayer.core.MediaPlayerCore;
 import com.lia.mediaplayer.ui.ButtonSink;
@@ -52,7 +53,16 @@ public final class ModBootstrap implements AutoCloseable {
         return ui;
     }
 
-    /** The key mappings to register with the game. */
+    /**
+     * Registers the addons, once. Each loader calls it at the moment it collects key mappings,
+     * before {@link #keyMappings()}, so the addons' key bindings are among them.
+     */
+    public void loadAddons(List<PendingAddon> addons) {
+        ui.loadAddons(addons);
+        keys.addAddonBindings(ui.addons().keyBindings());
+    }
+
+    /** The key mappings to register with the game: the mod's, then the addons'. */
     public List<KeyMapping> keyMappings() {
         return keys.all();
     }

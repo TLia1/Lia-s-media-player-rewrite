@@ -1,0 +1,18 @@
+modLoader = "javafml"
+loaderVersion = "[1,)"
+license = "MIT"
+
+[[mods]]
+modId = "exampleaddon"
+version = "${version}"
+displayName = "Lia's Media Player example addon"
+description = '''
+Shows the API of Lia's Media Player: an Internet Archive link source, a theme, and a restart button.
+'''
+
+[[dependencies.exampleaddon]]
+modId = "liasmediaplayerapi"
+type = "required"
+versionRange = "[4.0.0,5)"
+ordering = "AFTER"
+side = "CLIENT"
