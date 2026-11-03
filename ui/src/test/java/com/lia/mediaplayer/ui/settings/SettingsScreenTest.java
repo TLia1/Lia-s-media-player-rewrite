@@ -86,6 +86,33 @@ class SettingsScreenTest {
     }
 
     @Test
+    void clickingCategoryLabelsFiltersRowsAndAllRestoresThem() {
+        for (int height : new int[] {245, 1200}) {
+            var view = new RecordingCanvas(640, height);
+            screen.render(view, -1, -1, Mods.NONE);
+            for (String group : core.settings().groups()) {
+                clickLabel(view, Settings.groupKey(group));
+                assertThat(screen.rows().stream().filter(Widget::isVisible))
+                        .isNotEmpty()
+                        .allMatch(row -> row.spec().group().equals(group));
+            }
+            clickLabel(view, Keys.SETTINGS_ALL);
+            assertThat(screen.rows()).allMatch(Widget::isVisible);
+        }
+    }
+
+    private void clickLabel(RecordingCanvas view, String label) {
+        var text = view.texts().stream()
+                .filter(t -> t.text().equals(label))
+                .findFirst()
+                .orElseThrow();
+        assertThat(screen.input(new InputEvent.PointerDown(text.x() + 2, text.y() + 2, 0, Mods.NONE, 1)))
+                .isTrue();
+        screen.input(new InputEvent.PointerUp(text.x() + 2, text.y() + 2, 0, Mods.NONE));
+        screen.render(view.clear(), -1, -1, Mods.NONE);
+    }
+
+    @Test
     void searchAndGroupsFilterTheRows() {
         screen.search().setText("hosts");
         render(-1, -1);

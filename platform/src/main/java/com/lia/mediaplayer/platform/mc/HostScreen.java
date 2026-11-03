@@ -48,18 +48,36 @@ public final class HostScreen extends Screen {
     //? if <26.1 {
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        // Newer versions draw the background in Screen's outer rendering pass.
+        //? if <1.21.11 {
         if (hosted.drawsBackground()) {
             renderBackground(graphics, mouseX, mouseY, partialTick);
         }
+        //?}
         draw(graphics, mouseX, mouseY);
     }
     //?} else {
     /*@Override
     public void extractRenderState(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        if (hosted.drawsBackground()) {
-            extractBackground(graphics, mouseX, mouseY, partialTick);
-        }
         draw(graphics, mouseX, mouseY);
+    }
+    *///?}
+
+    // Let the outer pass draw the background once, while keeping media controls transparent.
+    // Calling it again from render/extractRenderState crashes outside a world (duplicate blur).
+    //? if >=1.21.11 && <26.1 {
+    /*@Override
+    public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        if (hosted.drawsBackground()) {
+            super.renderBackground(graphics, mouseX, mouseY, partialTick);
+        }
+    }
+    *///?} elif >=26.1 {
+    /*@Override
+    public void extractBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        if (hosted.drawsBackground()) {
+            super.extractBackground(graphics, mouseX, mouseY, partialTick);
+        }
     }
     *///?}
 

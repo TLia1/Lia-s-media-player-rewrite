@@ -70,11 +70,11 @@ public final class McInput {
     }
 
     public static InputEvent.PointerDown press(double x, double y, int button) {
-        return new InputEvent.PointerDown(x, y, button, currentMods(), 1);
+        return new InputEvent.PointerDown(x, y, McMouseButtons.normalize(button), currentMods(), 1);
     }
 
     public static InputEvent.PointerUp release(double x, double y, int button) {
-        return new InputEvent.PointerUp(x, y, button, currentMods());
+        return new InputEvent.PointerUp(x, y, McMouseButtons.normalize(button), currentMods());
     }
 
     public static InputEvent.Scroll scroll(double x, double y, double delta) {
