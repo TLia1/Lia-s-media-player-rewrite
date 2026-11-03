@@ -36,6 +36,7 @@ class FrameRingTest {
         assertThat(due.generation()).isEqualTo(1);
         assertThat(ring.size()).isEqualTo(1);
         assertThat(pool.freeCount()).isEqualTo(2);
+        assertThat(ring.dropped()).as("frames skipped over").isEqualTo(2);
         pool.release(due);
         assertThat(pool.freeCount()).isEqualTo(3);
     }

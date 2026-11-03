@@ -5,11 +5,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.lia.mediaplayer.core.MediaPlayerCore;
 import com.lia.mediaplayer.core.testing.FakePlatform;
 import com.lia.mediaplayer.core.testing.TestCores;
+import com.lia.mediaplayer.core.text.Keys;
 import com.lia.mediaplayer.ui.canvas.Rect;
 import com.lia.mediaplayer.ui.input.InputEvent;
 import com.lia.mediaplayer.ui.input.Mods;
 import com.lia.mediaplayer.ui.screen.MediaControlsScreen;
 import com.lia.mediaplayer.ui.screen.ScreenContext;
+import com.lia.mediaplayer.ui.settings.UiSettings;
 import com.lia.mediaplayer.ui.testing.FakeHost;
 import com.lia.mediaplayer.ui.testing.RecordingCanvas;
 import com.lia.mediaplayer.ui.window.Window;
@@ -179,5 +181,21 @@ class MediaPlayerUiTest {
         ui.worldLeft();
         assertThat(ui.windows().isEmpty()).isTrue();
         assertThat(core.playbacks().playbacks()).isEmpty();
+    }
+
+    @Test
+    void theDebugOverlayShowsOnlyWhenItsSettingIsOn() {
+        ui.renderHud(ScreenContext.NONE, canvas.clear());
+        renderOver(CHAT, -1, -1);
+        assertThat(canvas.strings()).noneMatch(text -> text.startsWith(Keys.DEBUG_SUMMARY));
+
+        core.settings().set(UiSettings.DEBUG_OVERLAY, true);
+        assertThat(ui.showCommand().run("video", CLIP)).isEmpty();
+        renderOver(CHAT, -1, -1);
+        assertThat(canvas.strings()).anyMatch(text -> text.startsWith(Keys.DEBUG_SUMMARY));
+        assertThat(canvas.strings()).anyMatch(text -> text.startsWith(Keys.DEBUG_PLAYER + "[1,video,"));
+        ui.renderHud(ScreenContext.NONE, canvas.clear());
+        assertThat(canvas.strings()).anyMatch(text -> text.startsWith(Keys.DEBUG_SUMMARY));
+        assertThat(ui.debugOverlay().windowsNanos()).isPositive();
     }
 }

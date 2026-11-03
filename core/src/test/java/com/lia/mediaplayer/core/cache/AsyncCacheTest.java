@@ -37,6 +37,7 @@ class AsyncCacheTest {
 
     private AsyncCache<String, String> cache(long maxWeight, int maxEntries) {
         return new AsyncCache<>(
+                "test",
                 clientThread,
                 key -> {
                     started++;
@@ -144,6 +145,7 @@ class AsyncCacheTest {
     @Test
     void aLoaderThatThrowsIsAFailure() {
         var cache = new AsyncCache<String, String>(
+                "test",
                 clientThread,
                 key -> {
                     throw new IllegalStateException("broken");
@@ -156,7 +158,7 @@ class AsyncCacheTest {
         runTasks();
         assertThat(cache.get("a")).isInstanceOf(AsyncCache.Entry.Failed.class);
         assertThatThrownBy(() -> new AsyncCache<String, String>(
-                        clientThread, k -> new CompletableFuture<>(), String::length, v -> {}, 1, 0))
+                        "test", clientThread, k -> new CompletableFuture<>(), String::length, v -> {}, 1, 0))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 

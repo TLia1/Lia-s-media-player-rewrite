@@ -22,6 +22,7 @@ import com.lia.mediaplayer.ui.testing.FakeHost;
 import com.lia.mediaplayer.ui.testing.RecordingCanvas;
 import com.lia.mediaplayer.ui.theme.Themes;
 import com.lia.mediaplayer.ui.widget.Widget;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
@@ -185,5 +186,27 @@ class SettingsScreenTest {
                 });
         assertThat(core.settings().get(CoreSettings.AUTO_UPDATE_TOOLS)).isTrue();
         assertThat(core.settings().get(UiSettings.MAX_AUDIO_WINDOWS)).isEqualTo(2);
+    }
+
+    @Test
+    void theFooterEmptiesTheCacheOnDisk() throws Exception {
+        Path thumbnail = core.paths().thumbnails().resolve("0123.jpg");
+        Files.createDirectories(thumbnail.getParent());
+        Files.write(thumbnail, new byte[] {1, 2, 3});
+        var call = canvas.texts().stream()
+                .filter(t -> t.text().equals(Keys.CLEAR_CACHE))
+                .findFirst()
+                .orElseThrow();
+        screen.input(new InputEvent.PointerDown(call.x() + 1, call.y() + 1, 0, Mods.NONE, 1));
+        screen.input(new InputEvent.PointerUp(call.x() + 1, call.y() + 1, 0, Mods.NONE));
+        long deadline = System.nanoTime() + 5_000_000_000L;
+        while (Files.exists(thumbnail) && System.nanoTime() < deadline) {
+            Thread.sleep(5);
+        }
+        assertThat(thumbnail).doesNotExist();
+        render(call.x() + 1, call.y() + 1);
+        assertThat(canvas.tooltip())
+                .hasValueSatisfying(
+                        tooltip -> assertThat(tooltip.lines()).containsExactly(Keys.CLEAR_CACHE_TOOLTIP + "[0.0]"));
     }
 }

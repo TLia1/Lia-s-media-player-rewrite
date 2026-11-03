@@ -21,11 +21,11 @@ import org.jspecify.annotations.Nullable;
  * followed by {@code WIDTH × HEIGHT × DEPTH} bytes. Allocation-free: the header is parsed byte
  * by byte from the (buffered) process stream.
  */
-final class PamReader {
+public final class PamReader {
 
     /** The geometry of one frame. */
-    record Header(int width, int height, int depth) {
-        int frameBytes() {
+    public record Header(int width, int height, int depth) {
+        public int frameBytes() {
             return width * height * depth;
         }
     }
@@ -41,7 +41,7 @@ final class PamReader {
      * @return {@code null} at a clean end of stream, before the first byte of a header
      * @throws IOException if the stream ends mid-header or the header is not one ffmpeg writes
      */
-    static @Nullable Header readHeader(InputStream in) throws IOException {
+    public static @Nullable Header readHeader(InputStream in) throws IOException {
         int first = in.read();
         if (first < 0) {
             return null;

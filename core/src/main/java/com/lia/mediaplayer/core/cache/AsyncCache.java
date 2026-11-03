@@ -1,5 +1,6 @@
 package com.lia.mediaplayer.core.cache;
 
+import com.lia.mediaplayer.core.diag.jfr.CacheLoadEvent;
 import com.lia.mediaplayer.core.lifecycle.ClientThread;
 import java.io.UncheckedIOException;
 import java.util.ArrayList;
@@ -37,6 +38,7 @@ public final class AsyncCache<K, V> {
         record Failed<V>(Throwable cause) implements Entry<V> {}
     }
 
+    private final String name;
     private final ClientThread clientThread;
     private final Function<K, CompletableFuture<V>> loader;
     private final ToLongFunction<V> weigher;
@@ -47,6 +49,7 @@ public final class AsyncCache<K, V> {
     private long weight;
 
     /**
+     * @param name what the cache holds, for the flight recorder's {@code CacheLoad} events
      * @param loader starts making the value of a key; called on the client thread, must not
      *     block
      * @param weigher what a value costs against {@code maxWeight}
@@ -54,6 +57,7 @@ public final class AsyncCache<K, V> {
      * @param maxEntries caps the keys kept, loading and failed ones included
      */
     public AsyncCache(
+            String name,
             ClientThread clientThread,
             Function<K, CompletableFuture<V>> loader,
             ToLongFunction<V> weigher,
@@ -63,6 +67,7 @@ public final class AsyncCache<K, V> {
         if (maxEntries < 1 || maxWeight < 0) {
             throw new IllegalArgumentException("Limits must be positive");
         }
+        this.name = name;
         this.clientThread = clientThread;
         this.loader = loader;
         this.weigher = weigher;
@@ -79,6 +84,7 @@ public final class AsyncCache<K, V> {
             slot = new Slot<>();
             slots.put(key, slot);
             Slot<V> started = slot;
+            started.event = CacheLoadEvent.start(name, key);
             CompletableFuture<V> future;
             try {
                 future = loader.apply(key);
@@ -141,6 +147,11 @@ public final class AsyncCache<K, V> {
     }
 
     private void settle(K key, Slot<V> slot, @Nullable V value, @Nullable Throwable error) {
+        CacheLoadEvent event = slot.event;
+        slot.event = null;
+        if (event != null) {
+            event.finish(value == null ? 0 : weigher.applyAsLong(value), error == null && value != null);
+        }
         if (slots.get(key) != slot || slot.discarded) {
             // Evicted or cleared while it loaded.
             if (value != null) {
@@ -203,5 +214,8 @@ public final class AsyncCache<K, V> {
 
         long weight;
         boolean discarded;
+
+        @Nullable
+        CacheLoadEvent event;
     }
 }

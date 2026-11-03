@@ -58,7 +58,30 @@ class PlaybackUnitTest {
                         Duration.ZERO,
                         Duration.ZERO,
                         Duration.ofSeconds(1),
-                        1))
+                        1,
+                        0,
+                        true))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void thePictureIsDecodedAtTheSmallestStepThatCoversTheView() {
+        assertThat(PlayerOptions.decodeHeight(0, 720)).as("size unknown").isEqualTo(720);
+        assertThat(PlayerOptions.decodeHeight(200, 720)).isEqualTo(360);
+        assertThat(PlayerOptions.decodeHeight(361, 720)).isEqualTo(480);
+        assertThat(PlayerOptions.decodeHeight(700, 720)).isEqualTo(720);
+        assertThat(PlayerOptions.decodeHeight(900, 720))
+                .as("never above the setting")
+                .isEqualTo(720);
+        assertThat(PlayerOptions.decodeHeight(900, 1080)).isEqualTo(1080);
+        assertThat(PlayerOptions.decodeHeight(2000, 1080)).isEqualTo(1080);
+        assertThat(PlayerOptions.decodeHeight(400, 360)).isEqualTo(360);
+        assertThat(PlayerOptions.DEFAULT.fpsFor(480)).isEqualTo(30);
+        assertThat(PlayerOptions.DEFAULT.fpsFor(720)).isEqualTo(60);
+        assertThat(PlayerOptions.DEFAULT.withViewHeight(-5).viewHeight()).isZero();
+        assertThat(PlayerOptions.DEFAULT.withVideo(false).withViewHeight(300)).satisfies(options -> {
+            assertThat(options.video()).isFalse();
+            assertThat(options.viewHeight()).isEqualTo(300);
+        });
     }
 }

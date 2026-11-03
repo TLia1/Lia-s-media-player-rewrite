@@ -42,6 +42,19 @@ public final class RecordingCanvas implements Canvas {
     }
 
     /** Forgets what was drawn: the start of a new frame. */
+    private double pixelScale = 1;
+
+    /** Draws as a screen with {@code scale} real pixels per GUI pixel would. */
+    public RecordingCanvas withPixelScale(double scale) {
+        pixelScale = scale;
+        return this;
+    }
+
+    @Override
+    public double pixelScale() {
+        return pixelScale;
+    }
+
     public RecordingCanvas clear() {
         calls.clear();
         layer = 0;

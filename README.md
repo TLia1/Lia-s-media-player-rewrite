@@ -1,10 +1,12 @@
 # Lia's Media Player — v3
 
 A rewrite of Lia's Media Player. The design, the reasons behind it and the milestones are
-in [REWRITE-DESIGN.md](REWRITE-DESIGN.md). This repository is at **milestone M6**: on top of
+in [REWRITE-DESIGN.md](REWRITE-DESIGN.md). This repository is at **milestone M7**: on top of
 the headless engine of M1, the windows of M2, the chat links of M3, the library and settings
-of M4 and the addons of M5 (API 4), the mod builds for **Minecraft 1.21.1, 1.21.11 and 26.3,
-on both NeoForge and Fabric**.
+of M4, the addons of M5 (API 4) and the version matrix of M6 (**Minecraft 1.21.1, 1.21.11 and
+26.3, on both NeoForge and Fabric**), M7 is the performance pass: pictures decoded no larger
+than they are shown, a disk cache, the ffmpeg picture decoder, flight-recorder events and a
+debug overlay, measured against the budget of the design (§12).
 
 - **Playlists** (the "Playlists" chip over the chat, or its key): create, rename, search,
   add links (a YouTube playlist or SoundCloud set is expanded into its tracks), drag entries
@@ -15,15 +17,29 @@ on both NeoForge and Fabric**.
 - **Settings** (the pause menu's button, Mod Menu or NeoForge's mod list, or a key):
   generated from every setting's spec, with groups, search, descriptions, warnings and a
   reset per row; changes apply at once. Picture height, the chat link filter, the picture
-  memory, yt-dlp updates, the theme (dark, high contrast, Minecraft, light), where new
-  windows open, the window caps, the hover preview — and the tools' state with "Update the
-  tools".
+  memory, the disk cache, hidden video windows, yt-dlp updates, the theme (dark, high
+  contrast, Minecraft, light), where new windows open, the window caps, the hover preview, the
+  debug overlay — and the tools' state with "Update the tools", and "Clear the cache".
 - **Windows remember**: the next window of a kind opens where the last was left, with its
   loop, shuffle and queue. Each player has a queue panel (double click to play, drag to
   reorder), previous and next, a heart, copy-link (Shift: at the current time), theatre
   mode, and hide; hidden players keep playing and a banner says what they start.
 - **Keys**: v2's twelve key mappings (unbound by default), and over the chat v2's shortcuts —
   Space, ←/→ (Shift: further) while nothing is typed, Ctrl+M/L/S/N/P/F/↑/↓ always.
+- **Thumbnails** beside every playlist entry and history row. They and the titles are kept in
+  `liasmediaplayer/cache/` (100 MB by default, a setting; "Clear the cache" in the settings),
+  so a list opens with its pictures and names on the next visit without asking anyone.
+- **More picture formats**: WebP and animated WebP (what Discord serves), AVIF and animated
+  PNG, through ffmpeg; PNG, JPEG, GIF and BMP as before.
+- **Lighter players**: a video is decoded at the smallest of 360, 480, 720 or 1080 lines that
+  covers its window on screen (never above the quality setting), at 30 frames a second below
+  720 lines; resizing past a step switches once the size has held for half a second. A hidden
+  video window keeps its picture by default, or plays sound only after five seconds hidden
+  (Performance → Hidden video windows). The video window has v2's ±10 s buttons back.
+- **Debug overlay** (Performance → Debug overlay): what the windows cost each frame, and per
+  player the decoded size and rate, how full its buffers are, frames dropped, how late the
+  picture is behind the sound, the upload time and how often the sound or picture ran dry.
+  The same moments are [flight-recorder events](#measuring) for JFR, `/jfr` or Spark.
 - **Upgrading from v2**: the first start imports v2's `config.json`, `playlists.json`,
   `history.json` and `windows.json`, and keeps them as `*.v2.bak`.
 - **Addons** (API 4, Minecraft-free): one `MediaPlayerAddon` per addon, found through the
@@ -33,12 +49,10 @@ on both NeoForge and Fabric**.
   [API guide](docs/API.md), the [porting guide from 3.x](docs/PORTING.md), and an
   [example addon](examples/example-addon) that is one jar for both loaders.
 
-Not yet at parity: v2's ±10 s buttons on the video window (the arrow keys seek), thumbnails
-in the playlist and history lists (titles are there; pictures come with the disk cache of
-M7), and the "sound only when hidden" setting (§20, decision 6; hidden players keep
-decoding, as in v2). Of v2's API, surfaces, sound with no window, positional sound, the
-watch-together hooks, picture decoders, screen tabs and the counters are not back yet; each has a
-`Capability` that says so (see the [API guide](docs/API.md#versions-and-capabilities)).
+The players are at parity with v2. Of v2's API, surfaces, sound with no window, positional
+sound, the watch-together hooks, picture decoders, screen tabs and the counters are not back
+yet; each has a `Capability` that says so (see the [API guide](docs/API.md#versions-and-capabilities)).
+The counters exist in the engine now (the debug overlay shows them); their API comes after M7.
 
 ## Trying it in game
 
@@ -119,6 +133,32 @@ and prints the player's state every second. Leave out `--script` to type command
 `shot [file.png]` save the current frame, `q` quit); add `--audio` for sound only or
 `--height 1080`. Tools are found on the machine or downloaded into
 `run/harness/liasmediaplayer/bin/`.
+
+### Measuring
+
+```bash
+./gradlew :benchmarks:jmh
+```
+
+JMH benchmarks of the hot paths against the budget: the chat rewriter, the rings, GIF
+decoding, and four video windows drawing (layout, draw calls and frame copies; the GPU's own
+work aside). `-Pjmh.include=Chat` runs those whose name matches. Results also go to
+`benchmarks/build/jmh-results.json`.
+
+```bash
+./gradlew :benchmarks:startBudget
+```
+
+Times a start and a seek through the whole engine on a 720p clip served over loopback, and
+prints what a 720p player holds in memory. Give it a link (`--args="<url>"`) to time that
+instead.
+
+In game, turn on the debug overlay, or record with JFR (`/jfr start`, or
+`-XX:StartFlightRecording`): the events are under "Lia's Media Player" — `Resolve`,
+`SessionStart` (ffmpeg's start to its first frame), `FrameUpload`, `RingUnderrun` and
+`CacheLoad`.
+
+### All targets
 
 ```bash
 ./gradlew :platform:buildAll

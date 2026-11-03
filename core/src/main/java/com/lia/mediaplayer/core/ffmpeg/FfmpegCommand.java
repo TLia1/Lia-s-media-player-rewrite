@@ -2,6 +2,7 @@ package com.lia.mediaplayer.core.ffmpeg;
 
 import com.lia.mediaplayer.api.source.StreamUrl;
 import com.lia.mediaplayer.core.net.Http;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -88,6 +89,46 @@ public final class FfmpegCommand {
                     audioTarget));
         }
         return command;
+    }
+
+    /**
+     * Decodes the picture in {@code file} — a still or an animation, in whatever format ffmpeg
+     * reads (WebP, AVIF, APNG) — into PAM frames on stdout, at most {@code maxSide} pixels on
+     * either side, at a constant {@code fps} so that frame {@code n} shows from {@code n / fps}.
+     * The file is one the mod wrote itself, so the input may use the {@code file} protocol and
+     * nothing else.
+     *
+     * @param maxFrames ffmpeg stops after this many, which bounds an endless animation
+     */
+    public static List<String> image(String ffmpeg, Path file, int maxSide, int fps, int maxFrames) {
+        String side = Integer.toString(maxSide);
+        return List.of(
+                ffmpeg,
+                "-nostdin",
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-protocol_whitelist",
+                "file",
+                "-i",
+                "file:" + file.toAbsolutePath(),
+                "-map",
+                "0:v:0",
+                "-vf",
+                "scale='min(iw," + side + ")':'min(ih," + side + ")':force_original_aspect_ratio=decrease",
+                "-fps_mode",
+                "cfr",
+                "-r",
+                Integer.toString(fps),
+                "-frames:v",
+                Integer.toString(maxFrames),
+                "-pix_fmt",
+                "rgba",
+                "-f",
+                "image2pipe",
+                "-c:v",
+                "pam",
+                "pipe:1");
     }
 
     /** {@code ffprobe} printing the streams and container of {@code url} as JSON. */

@@ -39,7 +39,7 @@ public final class AudioBar extends Window implements PlayerWindow {
         addTitleButton(CornerButtons.hide(this::hide));
         addTitleButton(CornerButtons.close(this::close));
         var body = setBody(new Column());
-        transport = body.add(new TransportBar(control, this::toggleQueue, this::isQueueOpen), 0, true);
+        transport = body.add(new TransportBar(control, this::toggleQueue, this::isQueueOpen, false), 0, true);
         addPopup(transport.volumePopup());
         queue = body.add(new QueuePanel(control, services.titles(), false), 0, true);
         queue.setVisible(false);

@@ -4,6 +4,7 @@ import com.lia.mediaplayer.api.media.MediaHandle;
 import com.lia.mediaplayer.api.media.RepeatMode;
 import com.lia.mediaplayer.api.source.MediaRef;
 import com.lia.mediaplayer.core.playback.PlayerSnapshot;
+import com.lia.mediaplayer.core.playback.PlayerStats;
 import com.lia.mediaplayer.core.video.VideoFrame;
 import java.time.Duration;
 import java.util.List;
@@ -33,6 +34,18 @@ public interface PlaybackControl {
     VideoFrame takeFrame();
 
     void releaseFrame(VideoFrame frame);
+
+    /**
+     * The height, in real pixels, at which the view shows the picture: frames are decoded no
+     * larger. Cheap to call every frame.
+     */
+    void setViewHeight(int pixels);
+
+    /** Whether to decode the picture; off, the sound plays alone. */
+    void setVideoEnabled(boolean on);
+
+    /** The current track's counters, for the debug overlay. */
+    PlayerStats stats();
 
     void togglePause();
 

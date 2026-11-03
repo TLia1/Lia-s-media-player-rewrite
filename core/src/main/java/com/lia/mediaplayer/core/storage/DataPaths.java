@@ -42,6 +42,16 @@ public record DataPaths(Path root) {
         return root.resolve("cache");
     }
 
+    /** The titles of links and where their pictures are, in one file of the cache. */
+    public Path titles() {
+        return cache().resolve("titles.json");
+    }
+
+    /** Small JPEGs of the links in lists, under the cache. */
+    public Path thumbnails() {
+        return cache().resolve("thumbnails");
+    }
+
     /** Downloaded ffmpeg, ffprobe and yt-dlp. */
     public Path bin() {
         return root.resolve("bin");

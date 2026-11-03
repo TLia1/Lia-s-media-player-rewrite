@@ -122,4 +122,95 @@ class ImageDecodersTest {
                 .extracting(DecodedImage.Frame::delayMillis)
                 .isEqualTo(0);
     }
+
+    @Test
+    void tellsTheFormatsOnlyFfmpegReadsByTheirBytes() throws IOException {
+        byte[] apng = {
+            (byte) 0x89,
+            'P',
+            'N',
+            'G',
+            13,
+            10,
+            26,
+            10,
+            0,
+            0,
+            0,
+            13,
+            'I',
+            'H',
+            'D',
+            'R',
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1,
+            8,
+            6,
+            0,
+            0,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            0,
+            0,
+            8,
+            'a',
+            'c',
+            'T',
+            'L',
+            0,
+            0,
+            0,
+            2,
+            0,
+            0,
+            0,
+            0,
+            9,
+            9,
+            9,
+            9
+        };
+        assertThat(ImageDecoders.Format.sniff(apng)).isEqualTo(ImageDecoders.Format.APNG);
+        assertThat(ImageDecoders.Format.sniff(TestImages.png(2, 2, 0xFF000000))).isEqualTo(ImageDecoders.Format.PNG);
+        byte[] animatedWebp = "RIFF\0\0\0\0WEBPVP8X\0\0\0\0\u0002\0\0\0".getBytes(StandardCharsets.ISO_8859_1);
+        assertThat(ImageDecoders.Format.sniff(animatedWebp)).isEqualTo(ImageDecoders.Format.WEBP);
+        assertThat(ImageDecoders.Format.animated(animatedWebp)).isTrue();
+        byte[] avif = "\0\0\0\u0018ftypmif1\0\0\0\0mif1avif".getBytes(StandardCharsets.ISO_8859_1);
+        assertThat(ImageDecoders.Format.sniff(avif)).isEqualTo(ImageDecoders.Format.AVIF);
+        assertThat(ImageDecoders.Format.animated(avif)).isFalse();
+        byte[] mp4 = "\0\0\0\u0018ftypisom\0\0\0\0isomavc1".getBytes(StandardCharsets.ISO_8859_1);
+        assertThat(ImageDecoders.Format.sniff(mp4)).isEqualTo(ImageDecoders.Format.UNKNOWN);
+        // Without a fallback, refused rather than misread.
+        assertThatThrownBy(() -> ImageDecoders.decode(avif))
+                .isInstanceOf(ImageDecoders.UnsupportedImageException.class);
+        assertThat(ImageDecoders.decode(avif, data -> ImageDecoders.decode(TestImages.png(3, 1, 0xFFFFFFFF)))
+                        .width())
+                .isEqualTo(3);
+    }
+
+    @Test
+    void shrinksAPictureIntoASmallJpeg() throws IOException {
+        DecodedImage big = ImageDecoders.decode(TestImages.png(1280, 720, 0xFF00FF00));
+        byte[] jpeg = ImageDecoders.jpeg(big, 192, 108);
+        assertThat(ImageDecoders.Format.sniff(jpeg)).isEqualTo(ImageDecoders.Format.JPEG);
+        DecodedImage small = ImageDecoders.decode(jpeg);
+        assertThat(small.width()).isEqualTo(192);
+        assertThat(small.height()).isEqualTo(108);
+        assertThat(pixel(small.frames().getFirst(), 0)[1]).isGreaterThan(200);
+        // Never enlarged.
+        assertThat(ImageDecoders.decode(
+                                ImageDecoders.jpeg(ImageDecoders.decode(TestImages.png(40, 30, 0xFF000000)), 192, 108))
+                        .width())
+                .isEqualTo(40);
+    }
 }

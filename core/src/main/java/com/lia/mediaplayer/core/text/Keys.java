@@ -38,6 +38,27 @@ public final class Keys {
     public static final String CLOSE = GUI + "tooltip.close";
     public static final String HIDE = GUI + "tooltip.hide";
     public static final String THEATER = GUI + "tooltip.theater";
+    /** {@code %s}: the seconds skipped. */
+    public static final String SKIP_BACK = GUI + "tooltip.skip_back";
+    /** {@code %s}: the seconds skipped. */
+    public static final String SKIP_FORWARD = GUI + "tooltip.skip_forward";
+
+    /** {@code %s}: the windows' time a frame in ms, the pictures' and the disk cache's megabytes. */
+    public static final String DEBUG_SUMMARY = GUI + "debug.summary";
+    /** {@code %s}: the player's number, its kind, its sessions so far, and whether it is hidden. */
+    public static final String DEBUG_PLAYER = GUI + "debug.player";
+
+    public static final String DEBUG_HIDDEN = GUI + "debug.hidden";
+    /**
+     * {@code %s}: decoded height, frame rate, frames buffered, frames dropped, ms late, upload ms,
+     * underruns.
+     */
+    public static final String DEBUG_PICTURE = GUI + "debug.picture";
+
+    public static final String DEBUG_NO_PICTURE = GUI + "debug.no_picture";
+    /** {@code %s}: ms buffered of the ring's ms, underruns. */
+    public static final String DEBUG_SOUND = GUI + "debug.sound";
+
     public static final String FAVORITE = GUI + "tooltip.favorite";
     public static final String UNFAVORITE = GUI + "tooltip.unfavorite";
     public static final String COPY_LINK = GUI + "tooltip.copy_link";
@@ -83,6 +104,10 @@ public final class Keys {
     public static final String SETTINGS_ALL = GUI + "settings.all";
     public static final String SETTINGS_RESET = GUI + "settings.reset";
     public static final String SETTINGS_RESET_ALL = GUI + "settings.reset_all";
+    public static final String CLEAR_CACHE = GUI + "settings.clear_cache";
+    /** {@code %s}: what the cache holds, in megabytes. */
+    public static final String CLEAR_CACHE_TOOLTIP = GUI + "settings.clear_cache.tooltip";
+
     public static final String UPDATE_TOOLS = GUI + "settings.update_tools";
     public static final String TOOLS_LOCATING = GUI + "settings.tools.locating";
     /** {@code %s}: the tool; {@code %s}: the percentage, or "…" while unknown. */

@@ -20,25 +20,29 @@ import com.lia.mediaplayer.ui.widget.SeekBar;
 import com.lia.mediaplayer.ui.widget.Size;
 import com.lia.mediaplayer.ui.widget.Widget;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.BooleanSupplier;
 
 /**
  * The controls under a player, shared by the video window and the audio bar: play/pause (or
- * retry after a failure), previous, next, the time, the seek bar, mute, loop, shuffle and the
- * queue panel's switch. Hovering the speaker raises the volume bar above it, as in v2: the
+ * retry after a failure), back and forward {@value #SKIP_SECONDS} s (the video window's only),
+ * previous, next, the time, the seek bar, mute, loop, shuffle and the queue panel's switch. Hovering the speaker raises the volume bar above it, as in v2: the
  * window holds that bar as a {@linkplain #volumePopup popup}, so it can reach over the picture
  * or past the top of the audio bar.
  *
  * <p>The window hands it a fresh snapshot each frame through {@link #update}; the controls
  * read that, so one frame never shows two different states.
  *
- * <p>When the bar is too narrow for everything, shuffle, loop, previous and the time give way,
- * in that order, so the rest stays inside the bar with room to seek.
+ * <p>When the bar is too narrow for everything, shuffle, loop, the skips, previous and the time
+ * give way, in that order, so the rest stays inside the bar with room to seek.
  */
 final class TransportBar extends Row {
 
     static final int HEIGHT = 16;
+    /** What the video window's skip buttons jump by, as v2's did. */
+    static final int SKIP_SECONDS = 10;
+
     private static final int PADDING = 3;
     private static final int GAP = 2;
 
@@ -59,7 +63,8 @@ final class TransportBar extends Row {
     /** The muted cross has a colour of its own, read from the theme of the frame being drawn. */
     private int mutedColor;
 
-    TransportBar(PlaybackControl control, Runnable toggleQueue, BooleanSupplier queueOpen) {
+    /** @param skipButtons whether to show the back and forward {@value #SKIP_SECONDS} s buttons */
+    TransportBar(PlaybackControl control, Runnable toggleQueue, BooleanSupplier queueOpen, boolean skipButtons) {
         this.control = control;
         padding(PADDING, 0).gap(GAP);
         add(new IconButton(
@@ -73,6 +78,16 @@ final class TransportBar extends Row {
                         this::playOrRetry)
                 .tooltip(() -> Text.translatable(
                         failed() ? Keys.RETRY : MediaTime.running(snapshot) ? Keys.PAUSE : Keys.PLAY)));
+        var skips = new ArrayList<Widget>();
+        if (skipButtons) {
+            Duration skip = Duration.ofSeconds(SKIP_SECONDS);
+            skips.add(add(new IconButton(Glyphs::rewind, () -> control.seekBy(skip.negated()))
+                    .enabledWhen(() -> MediaTime.seekable(snapshot))
+                    .tooltip(Text.translatable(Keys.SKIP_BACK, SKIP_SECONDS))));
+            skips.add(add(new IconButton(Glyphs::fastForward, () -> control.seekBy(skip))
+                    .enabledWhen(() -> MediaTime.seekable(snapshot))
+                    .tooltip(Text.translatable(Keys.SKIP_FORWARD, SKIP_SECONDS))));
+        }
         var previous = add(new IconButton(Glyphs::previous, control::previous)
                 .enabledWhen(control::hasPrevious)
                 .tooltip(Text.translatable(Keys.PREVIOUS)));
@@ -108,7 +123,11 @@ final class TransportBar extends Row {
         add(new IconButton(Glyphs::queue, toggleQueue)
                 .activeWhen(queueOpen)
                 .tooltip(() -> Text.translatable(queueOpen.getAsBoolean() ? Keys.QUEUE_HIDE : Keys.QUEUE_SHOW)));
-        optional = List.of(shuffle, loop, previous, time);
+        var giveWay = new ArrayList<Widget>(List.of(shuffle, loop));
+        giveWay.addAll(skips.reversed());
+        giveWay.add(previous);
+        giveWay.add(time);
+        optional = List.copyOf(giveWay);
     }
 
     /** The volume bar that rises from the speaker; the window adds it as a popup. */

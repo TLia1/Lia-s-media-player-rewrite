@@ -1,6 +1,7 @@
 package com.lia.mediaplayer.ui.screen;
 
 import com.lia.mediaplayer.api.text.Text;
+import com.lia.mediaplayer.core.image.ImageTextures;
 import com.lia.mediaplayer.core.library.HistoryEntry;
 import com.lia.mediaplayer.core.library.Library;
 import com.lia.mediaplayer.core.library.Playlist;
@@ -23,6 +24,7 @@ import com.lia.mediaplayer.ui.widget.TextField;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.function.Function;
 import java.util.function.LongSupplier;
 import java.util.function.Supplier;
 import org.jspecify.annotations.Nullable;
@@ -35,10 +37,12 @@ import org.jspecify.annotations.Nullable;
  */
 public final class HistoryScreen extends UiScreen {
 
-    static final int ROW = 14;
+    /** Room for a thumbnail beside the title. */
+    static final int ROW = Thumbnail.HEIGHT + 3;
 
     private final Library library;
     private final Titles titles;
+    private final Function<String, Optional<ImageTextures>> thumbnails;
     private final LibraryActions actions;
     private final @Nullable String targetId;
     private final TextField search;
@@ -54,10 +58,11 @@ public final class HistoryScreen extends UiScreen {
             LongSupplier nanoTime,
             Library library,
             Titles titles,
+            Function<String, Optional<ImageTextures>> thumbnails,
             Platform.Clipboard clipboard,
             LibraryActions actions,
             @Nullable String targetId) {
-        this(theme, nanoTime, library, titles, clipboard, actions, targetId, new Column());
+        this(theme, nanoTime, library, titles, thumbnails, clipboard, actions, targetId, new Column());
     }
 
     @SuppressWarnings("this-escape")
@@ -66,6 +71,7 @@ public final class HistoryScreen extends UiScreen {
             LongSupplier nanoTime,
             Library library,
             Titles titles,
+            Function<String, Optional<ImageTextures>> thumbnails,
             Platform.Clipboard clipboard,
             LibraryActions actions,
             @Nullable String targetId,
@@ -73,6 +79,7 @@ public final class HistoryScreen extends UiScreen {
         super(Text.translatable(Keys.HISTORY_TITLE), theme, nanoTime, root);
         this.library = library;
         this.titles = titles;
+        this.thumbnails = thumbnails;
         this.actions = actions;
         this.targetId = targetId;
         root.padding(8, 12).gap(6);
@@ -167,10 +174,11 @@ public final class HistoryScreen extends UiScreen {
                 });
     }
 
-    /** One entry: what it is, its title, and its buttons. */
+    /** One entry: its thumbnail, what it is, its title, and its buttons. */
     private static final class EntryRow extends Rows<HistoryEntry> {
 
         private final HistoryScreen screen;
+        private final Thumbnail thumbnail;
         private final Label kind = new Label(Text.literal(""), Role.TEXT_SUBTLE);
         private final Label title = new Label(Text.literal(""), Role.TEXT);
         private @Nullable HistoryEntry entry;
@@ -178,6 +186,8 @@ public final class HistoryScreen extends UiScreen {
         EntryRow(HistoryScreen screen) {
             super(ROW);
             this.screen = screen;
+            thumbnail = new Thumbnail(screen.thumbnails);
+            row.add(thumbnail);
             row.add(kind);
             row.add(title, 1);
             row.add(new IconButton(Glyphs::play, () -> current().ifPresent(e -> screen.actions.play(e.url())))
@@ -219,6 +229,7 @@ public final class HistoryScreen extends UiScreen {
         @Override
         protected void bind(HistoryEntry item, int index) {
             entry = item;
+            thumbnail.show(item.url());
             kind.setText(kindTag(item));
             title.setText(Text.literal(Titles.shortForm(item.url())));
         }

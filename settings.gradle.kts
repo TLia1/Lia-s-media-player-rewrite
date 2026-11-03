@@ -27,6 +27,9 @@ rootProject.name = "lias-media-player"
 // Plain Java modules: compiled once, no Minecraft on their classpath.
 include("api", "core", "ui")
 
+// JMH benchmarks of the hot paths against the performance budget. Not shipped.
+include("benchmarks")
+
 // An addon, built the way one outside the repository would be: against the API alone.
 include("example-addon")
 project(":example-addon").projectDir = file("examples/example-addon")

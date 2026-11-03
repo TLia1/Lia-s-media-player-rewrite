@@ -22,6 +22,7 @@ public final class FrameRing {
     private final Condition notFull = lock.newCondition();
     private int head;
     private int count;
+    private long dropped;
     private boolean closed;
 
     public FrameRing(int capacity, FramePool pool) {
@@ -70,6 +71,7 @@ public final class FrameRing {
             while (count > 0 && at(head).ptsMicros() <= nowMicros) {
                 if (newest != null) {
                     pool.release(newest);
+                    dropped++;
                 }
                 newest = poll();
             }
@@ -93,6 +95,7 @@ public final class FrameRing {
                 pool.release(poll());
                 dropped++;
             }
+            this.dropped += dropped;
             return dropped;
         } finally {
             lock.unlock();
@@ -104,6 +107,16 @@ public final class FrameRing {
         lock.lock();
         try {
             return count == 0 || at((head + count - 1) % frames.length).ptsMicros() <= nowMicros;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /** Frames decoded and due, but never taken for display because a newer one was due too. */
+    public long dropped() {
+        lock.lock();
+        try {
+            return dropped;
         } finally {
             lock.unlock();
         }

@@ -37,6 +37,10 @@ public final class UiSettings {
     public static final BoolSetting HOVER_PREVIEW =
             new BoolSetting(Settings.info("chat.hover_preview", Settings.CHAT), true);
 
+    /** The debug overlay: what each player and the windows cost, in the corner of the screen. */
+    public static final BoolSetting DEBUG_OVERLAY =
+            new BoolSetting(Settings.info("performance.debug_overlay", Settings.PERFORMANCE), false);
+
     private UiSettings() {}
 
     /** The theme setting, whose choices are the themes registered at the moment it is shown. */
@@ -47,6 +51,13 @@ public final class UiSettings {
 
     /** Every UI setting, the theme's included. */
     public static List<SettingSpec<?>> all(ChoiceSetting theme) {
-        return List.of(theme, DEFAULT_POSITION, MAX_VIDEO_WINDOWS, MAX_AUDIO_WINDOWS, MAX_IMAGE_WINDOWS, HOVER_PREVIEW);
+        return List.of(
+                theme,
+                DEFAULT_POSITION,
+                MAX_VIDEO_WINDOWS,
+                MAX_AUDIO_WINDOWS,
+                MAX_IMAGE_WINDOWS,
+                HOVER_PREVIEW,
+                DEBUG_OVERLAY);
     }
 }

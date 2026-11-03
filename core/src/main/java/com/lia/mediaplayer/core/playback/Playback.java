@@ -133,6 +133,37 @@ public final class Playback implements AutoCloseable {
         return options.volume();
     }
 
+    /**
+     * The on-screen height of the view that shows the picture, in real pixels, for this track
+     * and the next: the picture is decoded no larger than that. Cheap to call every frame.
+     */
+    public void setViewHeight(int pixels) {
+        if (pixels <= 0 || pixels == options.viewHeight()) {
+            return;
+        }
+        options = options.withViewHeight(pixels);
+        Player current = player;
+        if (current != null) {
+            current.setViewHeight(pixels);
+        }
+    }
+
+    /** Whether the picture is decoded, for this track and the next; off, a video plays its sound alone. */
+    public void setVideoEnabled(boolean on) {
+        if (on == options.video()) {
+            return;
+        }
+        options = options.withVideo(on);
+        Player current = player;
+        if (current != null) {
+            current.setVideoEnabled(on);
+        }
+    }
+
+    public boolean videoEnabled() {
+        return options.video();
+    }
+
     void setMasterVolume(float volume) {
         masterVolume = volume;
         applyGain();

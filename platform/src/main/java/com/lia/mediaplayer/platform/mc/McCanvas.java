@@ -64,6 +64,12 @@ final class McCanvas implements Canvas {
     }
 
     @Override
+    public double pixelScale() {
+        int guiHeight = graphics.guiHeight();
+        return guiHeight <= 0 ? 1 : Minecraft.getInstance().getWindow().getHeight() / (double) guiHeight;
+    }
+
+    @Override
     public void fill(int x0, int y0, int x1, int y1, int argb) {
         if (x1 > x0 && y1 > y0 && (argb >>> 24) != 0) {
             graphics.fill(x0, y0, x1, y1, argb);

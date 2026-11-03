@@ -13,6 +13,8 @@ import com.lia.mediaplayer.core.audio.AudioSink;
 import com.lia.mediaplayer.core.audio.PcmFormat;
 import com.lia.mediaplayer.core.audio.PcmRing;
 import com.lia.mediaplayer.core.diag.PlaybackError;
+import com.lia.mediaplayer.core.diag.jfr.RingUnderrunEvent;
+import com.lia.mediaplayer.core.diag.jfr.SessionStartEvent;
 import com.lia.mediaplayer.core.ffmpeg.ProbeResult;
 import com.lia.mediaplayer.core.ffmpeg.Session;
 import com.lia.mediaplayer.core.ffmpeg.SessionPlan;
@@ -57,12 +59,22 @@ import org.slf4j.LoggerFactory;
  *
  * <p>A stream URL refused with HTTP 403 has usually expired: the player resolves the link once
  * more, bypassing the cache, before reporting the failure.
+ *
+ * <p><b>Picture size.</b> Frames are decoded no larger than the view shows them: at the smallest
+ * of {@link PlayerOptions#DECODE_STEPS} that covers the view's height, and at 30 frames a second
+ * below 720 lines. A resize that crosses a step starts a new session at the current position
+ * once the size has been still for {@value #RESIZE_SETTLE_MILLIS} ms. Turning the picture off
+ * ({@link #setVideoEnabled}) likewise starts a session with sound alone, and turning it back on
+ * one with both.
  */
 public final class Player implements AutoCloseable {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(Player.class);
 
     private static final long HOUSEKEEPING_MILLIS = 20;
+    /** A view must keep its new size this long before the picture is decoded at it. */
+    static final long RESIZE_SETTLE_MILLIS = 500;
+
     /** Once one track has data, the other gets this long before playback starts without it. */
     private static final long TRACK_WAIT_NANOS = 1_500_000_000L;
 
@@ -84,6 +96,10 @@ public final class Player implements AutoCloseable {
     private record SeekBy(Duration delta) implements Message {}
 
     private record SetVolume(float volume) implements Message {}
+
+    private record SetViewHeight(int pixels) implements Message {}
+
+    private record SetVideo(boolean on) implements Message {}
 
     private record Close() implements Message {}
 
@@ -116,12 +132,28 @@ public final class Player implements AutoCloseable {
     private volatile @Nullable AudioPump pump;
     private volatile boolean audioClock;
 
+    // Counters for stats(); written by the actor, except lateMicros (the view's thread).
+    private volatile int decodeHeight;
+    private volatile double decodeFps;
+    private volatile long droppedEarlier;
+    private volatile long lateMicros;
+    private volatile long pictureUnderruns;
+    private volatile long sessions;
+
     // Actor only.
     private PlayerState state = new PlayerState.Idle();
     private @Nullable ResolvedMedia media;
     private MediaMetadata metadata = MediaMetadata.UNKNOWN;
+    private boolean canVideo;
     private boolean playVideo;
     private boolean playAudio;
+    private boolean videoWanted;
+    private int viewHeight;
+    private int requestedViewHeight;
+    private long viewChangedNanos;
+    private boolean pictureStarved;
+    private long reportedSoundUnderruns;
+    private @Nullable SessionStartEvent sessionEvent;
     private @Nullable Session session;
     private long generation;
     private long resolveAttempt;
@@ -153,6 +185,9 @@ public final class Player implements AutoCloseable {
         this.pendingStart = options.startAt();
         this.wantPlaying = !options.startPaused();
         this.volume = options.volume();
+        this.videoWanted = options.video();
+        this.viewHeight = options.viewHeight();
+        this.requestedViewHeight = options.viewHeight();
         this.wallClock.reset(micros(options.startAt()));
         this.actor = Thread.ofVirtual().name("lmp-player-" + id).unstarted(this::run);
     }
@@ -190,6 +225,21 @@ public final class Player implements AutoCloseable {
     /** Linear volume, 0 to 1. */
     public void setVolume(float linear) {
         inbox.add(new SetVolume(Math.max(0, Math.min(1, linear))));
+    }
+
+    /**
+     * The on-screen height of the view, in real pixels: the picture is decoded at the smallest
+     * step that covers it. Cheap to call every frame with the same value.
+     */
+    public void setViewHeight(int pixels) {
+        if (pixels > 0) {
+            inbox.add(new SetViewHeight(pixels));
+        }
+    }
+
+    /** Whether to decode the picture; off, a video plays its sound alone. */
+    public void setVideoEnabled(boolean on) {
+        inbox.add(new SetVideo(on));
     }
 
     /** Stops playback and releases the process, the sound line and the frames. Returns at once. */
@@ -234,7 +284,33 @@ public final class Player implements AutoCloseable {
      */
     public @Nullable VideoFrame takeFrame() {
         FrameRing ring = frames;
-        return ring == null ? null : ring.takeDue(positionMicros());
+        if (ring == null) {
+            return null;
+        }
+        long now = positionMicros();
+        VideoFrame frame = ring.takeDue(now);
+        if (frame != null) {
+            lateMicros = now - frame.ptsMicros();
+        }
+        return frame;
+    }
+
+    /** The counters of the debug overlay. */
+    public PlayerStats stats() {
+        FrameRing ring = frames;
+        AudioPump currentPump = pump;
+        return new PlayerStats(
+                decodeHeight,
+                decodeFps,
+                ring == null ? 0 : ring.size(),
+                ring == null ? 0 : ring.capacity(),
+                currentPump == null ? 0 : currentPump.bufferedMicros() / 1000,
+                currentPump == null ? 0 : currentPump.capacityMicros() / 1000,
+                droppedEarlier + (ring == null ? 0 : ring.dropped()),
+                lateMicros,
+                currentPump == null ? 0 : currentPump.underruns(),
+                pictureUnderruns,
+                sessions);
     }
 
     public void releaseFrame(VideoFrame frame) {
@@ -290,6 +366,17 @@ public final class Player implements AutoCloseable {
                     current.setGain(volume);
                 }
             }
+            case SetViewHeight view -> {
+                if (view.pixels() != requestedViewHeight) {
+                    requestedViewHeight = view.pixels();
+                    viewChangedNanos = services.nanoTime().getAsLong();
+                    if (media == null) {
+                        // Not decoding yet: the first session starts at the right size.
+                        viewHeight = view.pixels();
+                    }
+                }
+            }
+            case SetVideo video -> onSetVideo(video.on());
             case Close close -> closed = true;
             case Resolved resolved -> {
                 if (resolved.attempt() == resolveAttempt) {
@@ -375,15 +462,17 @@ public final class Player implements AutoCloseable {
         media = resolved;
         metadata = resolvedMetadata;
         boolean audioOnly = ref.kind() == MediaKind.AUDIO || options.resolve().audioOnly();
-        playVideo = metadata.tracks().hasVideo() && !audioOnly;
+        canVideo = metadata.tracks().hasVideo() && !audioOnly;
         playAudio = metadata.tracks().hasAudio();
+        playVideo = canVideo && (videoWanted || !playAudio);
         if (playAudio && !openSound()) {
-            if (!playVideo) {
+            if (!canVideo) {
                 fail(new PlaybackError(PlaybackError.Cause.NO_AUDIO_DEVICE, "No audio device could be opened"));
                 return;
             }
             LOGGER.warn("Player {}: no sound device, playing {} without sound", id, ref.url());
             playAudio = false;
+            playVideo = true;
         }
         if (!playVideo && !playAudio) {
             fail(PlaybackError.classify(ref.url() + " does not contain any stream ffmpeg can play"));
@@ -437,8 +526,9 @@ public final class Player implements AutoCloseable {
         } else {
             primary = current.audio().or(current::video).orElseThrow();
         }
-        double fps = Math.min(metadata.fps() > 0 ? metadata.fps() : DEFAULT_FPS, options.maxFps());
-        int[] box = decodeBox();
+        int step = PlayerOptions.decodeHeight(viewHeight, options.resolve().maxHeight());
+        double fps = Math.min(metadata.fps() > 0 ? metadata.fps() : DEFAULT_FPS, options.fpsFor(step));
+        int[] box = decodeBox(step);
         var plan = new SessionPlan(
                 primary, separateAudio, current.httpHeaders(), playVideo, playAudio, at, box[0], box[1], fps);
 
@@ -460,7 +550,13 @@ public final class Player implements AutoCloseable {
         sessionFinished = false;
         sessionStderr = "";
         audioDrained = false;
+        pictureStarved = false;
+        retireFrames();
         frames = ring;
+        decodeHeight = playVideo ? box[1] : 0;
+        decodeFps = playVideo ? fps : 0;
+        sessions = gen;
+        sessionEvent = SessionStartEvent.start(id, gen, seeking, playVideo, playAudio);
 
         try {
             session = Session.start(
@@ -492,7 +588,8 @@ public final class Player implements AutoCloseable {
             if (ring != null) {
                 ring.close();
             }
-            frames = null;
+            retireFrames();
+            endSessionEvent(false);
             fail(PlaybackError.of(e));
             return;
         }
@@ -500,12 +597,12 @@ public final class Player implements AutoCloseable {
     }
 
     /**
-     * The box frames are scaled into: {@code maxHeight} lines at 16:9, but never larger than
+     * The box frames are scaled into: {@code height} lines at 16:9, but never larger than
      * the source, so a small video is not scaled up just to be uploaded bigger. A rotated video
      * reports its coded size, so the box takes its longer side both ways.
      */
-    private int[] decodeBox() {
-        int height = options.resolve().maxHeight();
+    private int[] decodeBox(int step) {
+        int height = step;
         int width = (height * 16 / 9 + 1) & ~1;
         int longest = Math.max(metadata.width(), metadata.height());
         if (longest > 0) {
@@ -525,6 +622,7 @@ public final class Player implements AutoCloseable {
     private void noteFirstData() {
         if (firstDataNanos == 0) {
             firstDataNanos = services.nanoTime().getAsLong();
+            endSessionEvent(true);
         }
         becomeReadyIfDue();
     }
@@ -594,6 +692,52 @@ public final class Player implements AutoCloseable {
         }
     }
 
+    private void onSetVideo(boolean on) {
+        videoWanted = on;
+        boolean wanted = canVideo && (on || !playAudio);
+        if (media == null || wanted == playVideo) {
+            return;
+        }
+        playVideo = wanted;
+        relaunchInPlace();
+    }
+
+    /**
+     * Starts a session at the current position with the current picture settings, where one is
+     * running; otherwise they apply to the next. Not a seek: the state goes through {@code
+     * Buffering}, and listeners see no jump.
+     */
+    private void relaunchInPlace() {
+        switch (state) {
+            case PlayerState.Playing playing -> launch(position(), false);
+            case PlayerState.Paused paused -> launch(position(), false);
+            case PlayerState.Buffering buffering -> launch(buffering.position(), false);
+            case PlayerState.Seeking seeking -> launch(seeking.target(), true);
+            default -> {
+                // Idle, Resolving, Ended, Failed: the next session uses the new settings.
+            }
+        }
+    }
+
+    /** Decodes at the view's new size once it has kept it long enough. Housekeeping. */
+    private void followViewHeight() {
+        if (requestedViewHeight == viewHeight
+                || services.nanoTime().getAsLong() - viewChangedNanos < RESIZE_SETTLE_MILLIS * 1_000_000) {
+            return;
+        }
+        if (state instanceof PlayerState.Buffering || state instanceof PlayerState.Seeking) {
+            // A session is starting; look again once it runs.
+            return;
+        }
+        int max = options.resolve().maxHeight();
+        boolean crossesStep =
+                PlayerOptions.decodeHeight(requestedViewHeight, max) != PlayerOptions.decodeHeight(viewHeight, max);
+        viewHeight = requestedViewHeight;
+        if (crossesStep && playVideo && session != null && !sessionFinished) {
+            relaunchInPlace();
+        }
+    }
+
     private void onSeek(Duration requested) {
         Duration target = clamp(requested);
         switch (state) {
@@ -653,10 +797,12 @@ public final class Player implements AutoCloseable {
         if (ring != null) {
             ring.discardSuperseded(positionMicros());
         }
+        followViewHeight();
         switch (state) {
             case PlayerState.Buffering buffering -> becomeReadyIfDue();
             case PlayerState.Seeking seeking -> becomeReadyIfDue();
             case PlayerState.Playing playing -> {
+                countUnderruns(ring);
                 // With sound, the end is when the sound has played out; the picture follows it.
                 if (sessionFinished && (playAudio ? audioDrained : ring == null || ring.allDue(positionMicros()))) {
                     ended();
@@ -664,6 +810,27 @@ public final class Player implements AutoCloseable {
             }
             default -> {
                 // Nothing moves in the other states.
+            }
+        }
+    }
+
+    /** Notes the picture or the sound running dry mid-stream, for the counters and the flight recorder. */
+    @SuppressWarnings("NonAtomicVolatileUpdate") // pictureUnderruns has a single writer: the actor
+    private void countUnderruns(@Nullable FrameRing ring) {
+        if (playVideo && ring != null && !sessionFinished) {
+            boolean empty = ring.size() == 0;
+            if (empty && !pictureStarved) {
+                pictureUnderruns++;
+                RingUnderrunEvent.report(id, "video", 1);
+            }
+            pictureStarved = empty;
+        }
+        AudioPump currentPump = pump;
+        if (currentPump != null) {
+            long underruns = currentPump.underruns();
+            if (underruns > reportedSoundUnderruns) {
+                RingUnderrunEvent.report(id, "audio", underruns - reportedSoundUnderruns);
+                reportedSoundUnderruns = underruns;
             }
         }
     }
@@ -699,6 +866,7 @@ public final class Player implements AutoCloseable {
     }
 
     private void closeSession() {
+        endSessionEvent(false);
         Session current = session;
         session = null;
         if (current != null) {
@@ -706,10 +874,28 @@ public final class Player implements AutoCloseable {
         }
     }
 
+    private void endSessionEvent(boolean producedData) {
+        SessionStartEvent event = sessionEvent;
+        sessionEvent = null;
+        if (event != null) {
+            event.finish(producedData ? decodeHeight : 0, producedData);
+        }
+    }
+
+    /** Counts what the outgoing frame ring dropped before it goes. */
+    @SuppressWarnings("NonAtomicVolatileUpdate") // droppedEarlier has a single writer: the actor
+    private void retireFrames() {
+        FrameRing old = frames;
+        frames = null;
+        if (old != null) {
+            droppedEarlier += old.dropped();
+        }
+    }
+
     private void teardown() {
         stopOutput();
         closeSession();
-        frames = null;
+        retireFrames();
         AudioPump current = pump;
         pump = null;
         audioClock = false;

@@ -52,7 +52,7 @@ import org.jspecify.annotations.Nullable;
  * change applies at once; the settings file is written a moment later.
  *
  * <p>The footer says where the tools stand and offers to update them, which is the cure for
- * most YouTube failures.
+ * most YouTube failures, and to empty the cache, whose size it gives.
  */
 public final class SettingsScreen extends UiScreen {
 
@@ -72,6 +72,8 @@ public final class SettingsScreen extends UiScreen {
      * @param clipboard for the text fields
      * @param toolState where the tools stand, read each frame
      * @param updateTools starts downloading yt-dlp again
+     * @param cacheBytes what the cache on disk holds
+     * @param clearCache empties the cache on disk
      * @param close leaves the screen
      */
     public SettingsScreen(
@@ -82,8 +84,21 @@ public final class SettingsScreen extends UiScreen {
             Platform.Clipboard clipboard,
             Supplier<ToolState> toolState,
             Runnable updateTools,
+            LongSupplier cacheBytes,
+            Runnable clearCache,
             Runnable close) {
-        this(theme, nanoTime, settings, measurer, clipboard, toolState, updateTools, close, new Column());
+        this(
+                theme,
+                nanoTime,
+                settings,
+                measurer,
+                clipboard,
+                toolState,
+                updateTools,
+                cacheBytes,
+                clearCache,
+                close,
+                new Column());
     }
 
     private SettingsScreen(
@@ -94,6 +109,8 @@ public final class SettingsScreen extends UiScreen {
             Platform.Clipboard clipboard,
             Supplier<ToolState> toolState,
             Runnable updateTools,
+            LongSupplier cacheBytes,
+            Runnable clearCache,
             Runnable close,
             Column root) {
         super(Text.translatable(Keys.SETTINGS_TITLE), theme, nanoTime, root);
@@ -135,6 +152,10 @@ public final class SettingsScreen extends UiScreen {
         footer.gap(6);
         tools = footer.add(new Label(Text.literal(""), Role.TEXT_SUBTLE), 1);
         footer.add(new TextButton(Text.translatable(Keys.UPDATE_TOOLS), updateTools));
+        footer.add(new TextButton(Text.translatable(Keys.CLEAR_CACHE), clearCache)
+                .tooltipLines(() -> List.of(Text.translatable(
+                        Keys.CLEAR_CACHE_TOOLTIP,
+                        String.format(Locale.ROOT, "%.1f", cacheBytes.getAsLong() / (1024.0 * 1024.0))))));
         footer.add(new TextButton(Text.translatable(Keys.SETTINGS_RESET_ALL), this::resetShown));
         footer.add(new TextButton(Text.translatable(Keys.DONE), close).minWidth(60));
     }

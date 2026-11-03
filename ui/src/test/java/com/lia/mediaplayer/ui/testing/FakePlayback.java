@@ -6,6 +6,7 @@ import com.lia.mediaplayer.api.source.MediaRef;
 import com.lia.mediaplayer.api.text.Text;
 import com.lia.mediaplayer.core.playback.PlayerSnapshot;
 import com.lia.mediaplayer.core.playback.PlayerState;
+import com.lia.mediaplayer.core.playback.PlayerStats;
 import com.lia.mediaplayer.core.video.FramePool;
 import com.lia.mediaplayer.core.video.VideoFrame;
 import com.lia.mediaplayer.ui.windows.PlaybackControl;
@@ -37,6 +38,9 @@ public final class FakePlayback implements PlaybackControl {
     public final List<MediaRef> upcoming = new ArrayList<>();
     public int queueVersion;
     public int released;
+    public int viewHeight;
+    public boolean videoEnabled = true;
+    public PlayerStats stats = PlayerStats.NONE;
 
     /** A snapshot in {@code state} at {@code position} of {@code duration}, with a title. */
     public static PlayerSnapshot at(PlayerState state, Duration position, @Nullable Duration duration) {
@@ -115,6 +119,21 @@ public final class FakePlayback implements PlaybackControl {
     public void releaseFrame(VideoFrame frame) {
         released++;
         pool.release(frame);
+    }
+
+    @Override
+    public void setViewHeight(int pixels) {
+        viewHeight = pixels;
+    }
+
+    @Override
+    public void setVideoEnabled(boolean on) {
+        videoEnabled = on;
+    }
+
+    @Override
+    public PlayerStats stats() {
+        return stats;
     }
 
     @Override

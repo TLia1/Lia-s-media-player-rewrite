@@ -51,6 +51,24 @@ public final class Glyphs {
         }
     }
 
+    /** Back a few seconds: two triangles pointing left. */
+    public static void rewind(Canvas c, int x, int y, int color) {
+        for (int i = 0; i < 9; i++) {
+            int len = 1 + Math.min(i, 8 - i);
+            c.fill(x + 5 - len, y + 1 + i, x + 5, y + 2 + i, color);
+            c.fill(x + 10 - len, y + 1 + i, x + 10, y + 2 + i, color);
+        }
+    }
+
+    /** Forward a few seconds: two triangles pointing right. */
+    public static void fastForward(Canvas c, int x, int y, int color) {
+        for (int i = 0; i < 9; i++) {
+            int len = 1 + Math.min(i, 8 - i);
+            c.fill(x + 1, y + 1 + i, x + 1 + len, y + 2 + i, color);
+            c.fill(x + 6, y + 1 + i, x + 6 + len, y + 2 + i, color);
+        }
+    }
+
     /** A speaker with its sound waves, or with a cross in {@code mutedColor} when muted. */
     public static void speaker(Canvas c, int x, int y, boolean muted, int color, int mutedColor) {
         int mid = y + SIZE / 2;

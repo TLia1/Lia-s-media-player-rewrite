@@ -4,6 +4,7 @@ import com.lia.mediaplayer.api.media.MediaKind;
 import com.lia.mediaplayer.api.text.Text;
 import com.lia.mediaplayer.core.platform.TextureRef;
 import com.lia.mediaplayer.core.playback.PlayerSnapshot;
+import com.lia.mediaplayer.core.settings.WhenHidden;
 import com.lia.mediaplayer.core.text.Keys;
 import com.lia.mediaplayer.ui.canvas.Canvas;
 import com.lia.mediaplayer.ui.canvas.Rect;
@@ -27,6 +28,10 @@ import org.jspecify.annotations.Nullable;
  * <p>When the first frame arrives the window takes the picture's shape once, keeping its
  * width, unless it was resized by then; after that the picture is letterboxed. Theatre mode
  * makes the picture as large as the screen allows, and gives the window back its frame after.
+ *
+ * <p>Hidden, it keeps decoding by default. With the "sound only" setting, after {@value
+ * #HIDDEN_SOUND_ONLY_TICKS} ticks hidden the playback drops its picture; showing the window
+ * brings it back at the current position.
  */
 public final class VideoWindow extends Window implements PlayerWindow {
 
@@ -34,8 +39,11 @@ public final class VideoWindow extends Window implements PlayerWindow {
 
     static final int DEFAULT_PICTURE_WIDTH = 256;
     static final int DEFAULT_PICTURE_HEIGHT = 144;
+    /** Five seconds: hiding a window for a moment does not restart its decoding. */
+    static final int HIDDEN_SOUND_ONLY_TICKS = 100;
 
     private final PlaybackControl control;
+    private final WindowServices services;
     private final VideoView view;
     private final TransportBar transport;
     private final QueuePanel queue;
@@ -43,10 +51,13 @@ public final class VideoWindow extends Window implements PlayerWindow {
     private boolean shaped;
     private Rect openedAt = Rect.EMPTY;
     private @Nullable Rect beforeTheater;
+    private int hiddenTicks;
+    private boolean soundOnly;
 
     public VideoWindow(PlaybackControl control, WindowServices services) {
         super(Text.literal(""));
         this.control = control;
+        this.services = services;
         CornerButtons.addonButtons(
                 services.actions(), AddonActions.player(MediaKind.VIDEO, control), this::addTitleButton);
         titleButtons = List.of(
@@ -62,7 +73,7 @@ public final class VideoWindow extends Window implements PlayerWindow {
         var body = setBody(new Row());
         var player = body.add(new Column(), 1);
         view = player.add(new VideoView(control, services.platform().textures()), 1);
-        transport = player.add(new TransportBar(control, this::toggleQueue, this::isQueueOpen), 0, true);
+        transport = player.add(new TransportBar(control, this::toggleQueue, this::isQueueOpen, true), 0, true);
         addPopup(transport.volumePopup());
         queue = body.add(new QueuePanel(control, services.titles(), true), 0, true);
         queue.setVisible(false);
@@ -173,6 +184,14 @@ public final class VideoWindow extends Window implements PlayerWindow {
         // The engine closes every playback when the world is left; the window follows.
         if (control.isClosed()) {
             close();
+            return;
+        }
+        hiddenTicks = isHidden() ? hiddenTicks + 1 : 0;
+        boolean wantSoundOnly =
+                hiddenTicks >= HIDDEN_SOUND_ONLY_TICKS && services.whenHidden().get() == WhenHidden.SOUND_ONLY;
+        if (wantSoundOnly != soundOnly) {
+            soundOnly = wantSoundOnly;
+            control.setVideoEnabled(!wantSoundOnly);
         }
     }
 
@@ -220,6 +239,16 @@ public final class VideoWindow extends Window implements PlayerWindow {
     /** Frames uploaded so far, for tests. */
     int uploads() {
         return view.uploads();
+    }
+
+    /** What a frame upload has taken lately, in nanoseconds: the debug overlay's figure. */
+    public long uploadNanos() {
+        return view.uploadNanos();
+    }
+
+    /** Whether the playback plays its sound alone because the window has been hidden a while. */
+    public boolean soundOnly() {
+        return soundOnly;
     }
 
     // The parts, for tests.

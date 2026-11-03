@@ -40,7 +40,13 @@ public final class ImageCache implements AutoCloseable {
             long maxBytes) {
         this.textures = textures;
         this.cache = new AsyncCache<>(
-                clientThread, loader, ImageTextures::bytes, image -> image.release(textures), maxBytes, MAX_ENTRIES);
+                "images",
+                clientThread,
+                loader,
+                ImageTextures::bytes,
+                image -> image.release(textures),
+                maxBytes,
+                MAX_ENTRIES);
     }
 
     /**

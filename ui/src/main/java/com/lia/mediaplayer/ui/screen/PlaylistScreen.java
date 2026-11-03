@@ -50,6 +50,9 @@ import org.jspecify.annotations.Nullable;
 public final class PlaylistScreen extends UiScreen {
 
     static final int ROW = 14;
+    /** An entry's row: room for its thumbnail. */
+    static final int ENTRY_ROW = Thumbnail.HEIGHT + 3;
+
     private static final long CONFIRM_NANOS = 3_000_000_000L;
 
     /** An entry of the chosen playlist, at its place in the whole playlist. */
@@ -164,7 +167,7 @@ public final class PlaylistScreen extends UiScreen {
                 chosen.add(new TextField(clipboard, 64).placeholder(Text.translatable(Keys.PLAYLISTS_SEARCH)), 0, true);
         entriesCount = chosen.add(new Label(Text.literal(""), Role.TEXT_SUBTLE), 0, true);
         entries = chosen.add(
-                new ListView<Entry>(ROW, () -> new EntryRow(this))
+                new ListView<Entry>(ENTRY_ROW, () -> new EntryRow(this))
                         .onActivate((index, press) -> {
                             if (press.clicks() == 2) {
                                 entryAt(index).ifPresent(entry -> actions.play(entry.url()));
@@ -458,19 +461,22 @@ public final class PlaylistScreen extends UiScreen {
         }
     }
 
-    /** An entry of the chosen playlist: its place, its title and a button that removes it. */
+    /** An entry of the chosen playlist: its place, its thumbnail, its title and a button that removes it. */
     private static final class EntryRow extends Rows<Entry> {
 
         private final PlaylistScreen screen;
         private final Label number = new Label(Text.literal(""), Role.TEXT_SUBTLE);
+        private final Thumbnail thumbnail;
         private final Label title = new Label(Text.literal(""), Role.TEXT);
         private int index;
         private String url = "";
 
         EntryRow(PlaylistScreen screen) {
-            super(ROW);
+            super(ENTRY_ROW);
             this.screen = screen;
+            thumbnail = new Thumbnail(screen.core.thumbnails()::get);
             row.add(number);
+            row.add(thumbnail);
             row.add(title, 1);
             row.add(new IconButton(Glyphs::close, () -> screen.removeEntry(index))
                     .dangerous()
@@ -482,6 +488,7 @@ public final class PlaylistScreen extends UiScreen {
             index = item.index();
             url = item.url();
             number.setText(Text.literal((item.index() + 1) + "."));
+            thumbnail.show(url);
             title.setText(Text.literal(Titles.shortForm(url)));
         }
 

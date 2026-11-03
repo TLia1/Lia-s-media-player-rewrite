@@ -27,18 +27,22 @@ public final class ImageLoader {
     private final Http http;
     private final Executor io;
     private final Executor decode;
+    private final ImageDecoders.Fallback fallback;
 
-    public ImageLoader(ResolverChain resolver, Http http, Executor io, Executor decode) {
+    /** @param fallback reads WebP, AVIF and animated PNG */
+    public ImageLoader(
+            ResolverChain resolver, Http http, Executor io, Executor decode, ImageDecoders.Fallback fallback) {
         this.resolver = resolver;
         this.http = http;
         this.io = io;
         this.decode = decode;
+        this.fallback = fallback;
     }
 
     public CompletableFuture<DecodedImage> load(MediaRef ref) {
         return resolver.resolve(ref, ResolveOptions.DEFAULT)
                 .thenApplyAsync(media -> fetch(media.primary().url()), io)
-                .thenApplyAsync(ImageLoader::decode, decode);
+                .thenApplyAsync(this::decode, decode);
     }
 
     private byte[] fetch(String url) {
@@ -49,9 +53,9 @@ public final class ImageLoader {
         }
     }
 
-    private static DecodedImage decode(byte[] bytes) {
+    private DecodedImage decode(byte[] bytes) {
         try {
-            return ImageDecoders.decode(bytes);
+            return ImageDecoders.decode(bytes, fallback);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }

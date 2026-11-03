@@ -50,6 +50,8 @@ public final class AudioPump implements AutoCloseable {
     private volatile @Nullable Feed active;
     private volatile boolean playing;
     private volatile boolean closed;
+    /** Times the sink was left waiting on an empty ring mid-stream. Written by the pump only. */
+    private volatile long underruns;
 
     /**
      * Starts the pump thread. The sink must already be open.
@@ -102,6 +104,23 @@ public final class AudioPump implements AutoCloseable {
         sink.setPan(value);
     }
 
+    /** Times the sound ran dry while playing, before its stream ended: the network fell behind. */
+    public long underruns() {
+        return underruns;
+    }
+
+    /** Decoded sound waiting in the current feed, in microseconds. Any thread. */
+    public long bufferedMicros() {
+        Feed current = active;
+        return current == null ? 0 : format.framesToMicros(current.ring.available() / format.frameBytes());
+    }
+
+    /** What the current feed's ring holds when full, in microseconds. */
+    public long capacityMicros() {
+        Feed current = active;
+        return current == null ? 0 : format.framesToMicros(current.ring.capacity() / format.frameBytes());
+    }
+
     /** Where playback is in the media, in microseconds. Any thread. */
     public long positionMicros() {
         Feed next = pending.get();
@@ -116,8 +135,9 @@ public final class AudioPump implements AutoCloseable {
         return current.startMicros + format.framesToMicros(Math.min(played, current.writtenFrames));
     }
 
-    @SuppressWarnings("NonAtomicVolatileUpdate") // writtenFrames has a single writer: this thread
+    @SuppressWarnings("NonAtomicVolatileUpdate") // writtenFrames and underruns have a single writer: this thread
     private void run() {
+        boolean starved = false;
         while (!closed) {
             Feed next = pending.get();
             if (next != null) {
@@ -135,10 +155,15 @@ public final class AudioPump implements AutoCloseable {
             int readable = Math.min(chunkBytes, ring.readableContiguous());
             readable -= readable % format.frameBytes();
             if (readable == 0) {
+                if (!starved && !ring.isEndOfStream()) {
+                    underruns++;
+                }
+                starved = true;
                 checkDrained(feed);
                 LockSupport.parkNanos(IDLE_PARK_NANOS);
                 continue;
             }
+            starved = false;
             int written = sink.write(ring.array(), ring.readIndex(), readable);
             written -= written % format.frameBytes();
             if (pending.get() == null && active == feed) {

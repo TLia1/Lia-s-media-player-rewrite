@@ -41,6 +41,14 @@ public interface Canvas {
     /** A tooltip at the cursor, drawn above everything else in the frame. */
     void tooltip(List<Text> lines, int x, int y);
 
+    /**
+     * Real screen pixels per GUI pixel: what a picture drawn at a given GUI size needs to look
+     * sharp. 1 where there is no screen.
+     */
+    default double pixelScale() {
+        return 1;
+    }
+
     default void fill(Rect rect, int argb) {
         fill(rect.x(), rect.y(), rect.right(), rect.bottom(), argb);
     }

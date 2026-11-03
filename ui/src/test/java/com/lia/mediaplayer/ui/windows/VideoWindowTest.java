@@ -12,6 +12,7 @@ import com.lia.mediaplayer.core.link.ShareLinks;
 import com.lia.mediaplayer.core.platform.TextureRef;
 import com.lia.mediaplayer.core.playback.PlayerSnapshot;
 import com.lia.mediaplayer.core.playback.PlayerState;
+import com.lia.mediaplayer.core.settings.WhenHidden;
 import com.lia.mediaplayer.core.testing.FakePlatform;
 import com.lia.mediaplayer.ui.canvas.Rect;
 import com.lia.mediaplayer.ui.input.InputEvent;
@@ -60,8 +61,9 @@ class VideoWindowTest {
 
     /** The transport's controls in M2's order, less the volume slider: play, next, time, seek, mute, loop, shuffle. */
     private Widget transportChild(int index) {
-        // Previous sits right after play since M4, and the queue switch comes last.
-        return transport().children().get(index == 0 ? 0 : index + 1);
+        // The ±10 s buttons and previous sit right after play since M7 and M4, and the queue
+        // switch comes last.
+        return transport().children().get(index == 0 ? 0 : index + 3);
     }
 
     private TransportBar transport() {
@@ -442,7 +444,12 @@ class VideoWindowTest {
             }
         };
         var services = new WindowServices(
-                platform, favorites, url -> Optional.of("Title of " + url), ShareLinks::atTime, AddonActions.NONE);
+                platform,
+                favorites,
+                url -> Optional.of("Title of " + url),
+                ShareLinks::atTime,
+                AddonActions.NONE,
+                () -> WhenHidden.KEEP_VIDEO);
         var hearted = windows.open(new VideoWindow(playback, services));
         render(-1, -1, 0);
         click(hearted.titleButtons().getFirst());
@@ -452,7 +459,59 @@ class VideoWindowTest {
 
     @Test
     void previousAndTheQueueSwitchExplainThemselves() {
-        assertThat(tooltipOver(transport().children().get(1))).contains("gui.liasmediaplayer.tooltip.previous");
+        assertThat(tooltipOver(transport().children().get(3))).contains("gui.liasmediaplayer.tooltip.previous");
         assertThat(tooltipOver(transport().children().getLast())).contains("gui.liasmediaplayer.queue.show");
+    }
+
+    @Test
+    void tellsThePlaybackHowTallThePictureIsInRealPixels() {
+        assertThat(playback.viewHeight).isEqualTo(view().bounds().height());
+        windows.render(canvas.clear().withPixelScale(3), new RenderContext(Themes.DARK, 0, -1, -1, true));
+        assertThat(playback.viewHeight).isEqualTo(view().bounds().height() * 3);
+    }
+
+    @Test
+    void theSkipButtonsJumpTenSeconds() {
+        playback.snapshot = FakePlayback.at(
+                new PlayerState.Playing(Duration.ofSeconds(30)), Duration.ofSeconds(30), Duration.ofMinutes(1));
+        render(-1, -1, 0);
+        click(transport().children().get(1));
+        click(transport().children().get(2));
+        assertThat(playback.calls).containsExactly("seekBy -10000", "seekBy 10000");
+        assertThat(tooltipOver(transport().children().get(1))).contains("gui.liasmediaplayer.tooltip.skip_back[10]");
+    }
+
+    @Test
+    void aHiddenWindowPlaysSoundOnlyAfterAWhileWhenAskedTo() {
+        var setting = new WhenHidden[] {WhenHidden.SOUND_ONLY};
+        var services = WindowServices.of(platform);
+        services = new WindowServices(
+                services.platform(),
+                services.favorites(),
+                services.titles(),
+                services.linkAt(),
+                services.actions(),
+                () -> setting[0]);
+        var hiding = windows.open(new VideoWindow(playback, services));
+        hiding.setHidden(true);
+        for (int i = 1; i < VideoWindow.HIDDEN_SOUND_ONLY_TICKS; i++) {
+            windows.tick();
+        }
+        assertThat(playback.videoEnabled).as("a moment hidden").isTrue();
+        windows.tick();
+        assertThat(playback.videoEnabled).isFalse();
+        assertThat(hiding.soundOnly()).isTrue();
+
+        hiding.setHidden(false);
+        windows.tick();
+        assertThat(playback.videoEnabled).isTrue();
+
+        // With the default, hidden windows keep their picture.
+        setting[0] = WhenHidden.KEEP_VIDEO;
+        hiding.setHidden(true);
+        for (int i = 0; i < 2 * VideoWindow.HIDDEN_SOUND_ONLY_TICKS; i++) {
+            windows.tick();
+        }
+        assertThat(playback.videoEnabled).isTrue();
     }
 }

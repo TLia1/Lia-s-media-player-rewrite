@@ -54,6 +54,7 @@ class PlayerIntegrationTest {
     static String videoOnly;
     static String audioOnly;
     static String shortClip;
+    static String hd;
 
     @BeforeAll
     static void generateMedia() throws IOException {
@@ -63,6 +64,7 @@ class PlayerIntegrationTest {
         videoOnly = server.serve("/video.mkv", TestMedia.videoOnly(mediaDir, "video.mkv", 320, 240, 3));
         audioOnly = server.serve("/audio.flac", TestMedia.audioOnly(mediaDir, "audio.flac", 3));
         shortClip = server.serve("/short.mkv", TestMedia.audioVideo(mediaDir, "short.mkv", 160, 120, 2));
+        hd = server.serve("/hd.mkv", TestMedia.audioVideo(mediaDir, "hd.mkv", 1280, 720, 6));
     }
 
     @AfterAll
@@ -88,6 +90,98 @@ class PlayerIntegrationTest {
             return log.last() instanceof PlayerState.Ended || log.last() instanceof PlayerState.Failed;
         });
         return seen;
+    }
+
+    /** The size of the newest frame due, waiting for one of {@code height} lines. */
+    private static VideoFrameRecord awaitFrameOfHeight(Player player, int height) {
+        var last = new ArrayList<VideoFrameRecord>();
+        await(TIMEOUT, "a frame " + height + " lines tall (saw " + last + ")", () -> {
+            VideoFrame frame = player.takeFrame();
+            if (frame != null) {
+                last.clear();
+                last.add(new VideoFrameRecord(frame.ptsMicros(), frame.width(), frame.height()));
+                player.releaseFrame(frame);
+            }
+            return !last.isEmpty() && last.getFirst().height() == height;
+        });
+        return last.getFirst();
+    }
+
+    @Test
+    void decodesNoLargerThanTheViewAndFollowsAResizeOnceItSettles() {
+        try (var engine = TestEngine.create()) {
+            var log = new StateLog();
+            // The view is known before the first session starts: no relaunch for it.
+            Player player = engine.engine.play(direct(engine, hd), PlayerOptions.DEFAULT.withViewHeight(300), log);
+            log.awaitLast(PlayerState.Playing.class, TIMEOUT);
+            VideoFrameRecord small = awaitFrameOfHeight(player, 360);
+            assertThat(small.width()).isEqualTo(640);
+            assertThat(player.stats().decodeHeight()).isEqualTo(360);
+            assertThat(player.stats().fps()).as("the source's rate").isEqualTo(30);
+            assertThat(player.stats().sessions()).isEqualTo(1);
+
+            // Theatre mode: past the step, so a new session at 720 lines once the size holds.
+            player.setViewHeight(700);
+            awaitFrameOfHeight(player, 720);
+            assertThat(player.stats().sessions()).isEqualTo(2);
+            assertThat(log.saw(PlayerState.Seeking.class)).as("not a seek").isFalse();
+            // Within the same step: nothing restarts.
+            player.setViewHeight(650);
+            sleep(Player.RESIZE_SETTLE_MILLIS + 200);
+            assertThat(player.stats().sessions()).isEqualTo(2);
+            assertThat(log.last()).isInstanceOf(PlayerState.Playing.class);
+        }
+    }
+
+    @Test
+    void withoutItsPictureAVideoKeepsPlayingItsSound() {
+        try (var engine = TestEngine.create()) {
+            var log = new StateLog();
+            Player player = engine.engine.play(direct(engine, av), PlayerOptions.DEFAULT, log);
+            log.awaitLast(PlayerState.Playing.class, TIMEOUT);
+            awaitFrameOfHeight(player, 240);
+
+            player.setVideoEnabled(false);
+            await(
+                    TIMEOUT,
+                    "sound alone",
+                    () -> !player.snapshot().hasVideo() && player.snapshot().state() instanceof PlayerState.Playing);
+            assertThat(player.stats().decodeHeight()).isZero();
+            assertThat(player.takeFrame()).isNull();
+            long before = player.positionMicros();
+            sleep(300);
+            assertThat(player.positionMicros()).as("the sound goes on").isGreaterThan(before);
+
+            player.setVideoEnabled(true);
+            awaitFrameOfHeight(player, 240);
+            assertThat(player.snapshot().hasVideo()).isTrue();
+            assertThat(player.stats().sessions()).isEqualTo(3);
+            assertThat(player.stats().soundCapacityMillis()).isGreaterThanOrEqualTo(2000);
+            assertThat(player.stats().frameCapacity()).isPositive();
+            assertThat(log.saw(PlayerState.Seeking.class)).isFalse();
+        }
+    }
+
+    @Test
+    void aSilentVideoKeepsItsPictureWhateverIsAsked() {
+        try (var engine = TestEngine.create()) {
+            var log = new StateLog();
+            Player player = engine.engine.play(direct(engine, videoOnly), PlayerOptions.DEFAULT.withVideo(false), log);
+            log.awaitLast(PlayerState.Playing.class, TIMEOUT);
+            awaitFrameOfHeight(player, 240);
+            player.setVideoEnabled(false);
+            sleep(200);
+            assertThat(player.stats().sessions()).isEqualTo(1);
+        }
+    }
+
+    private static void sleep(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError(e);
+        }
     }
 
     private record VideoFrameRecord(long ptsMicros, int width, int height) {}
@@ -216,7 +310,9 @@ class PlayerIntegrationTest {
                     Duration.ofSeconds(10),
                     Duration.ofSeconds(1),
                     Duration.ofSeconds(2),
-                    0.5f);
+                    0.5f,
+                    0,
+                    true);
             Player player = engine.engine.play(direct(engine, av), options, log);
             log.awaitLast(PlayerState.Paused.class, TIMEOUT);
 

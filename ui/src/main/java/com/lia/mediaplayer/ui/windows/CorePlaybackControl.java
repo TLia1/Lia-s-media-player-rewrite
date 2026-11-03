@@ -7,6 +7,7 @@ import com.lia.mediaplayer.core.playback.Playback;
 import com.lia.mediaplayer.core.playback.PlaybackRegistry;
 import com.lia.mediaplayer.core.playback.Player;
 import com.lia.mediaplayer.core.playback.PlayerSnapshot;
+import com.lia.mediaplayer.core.playback.PlayerStats;
 import com.lia.mediaplayer.core.video.VideoFrame;
 import java.time.Duration;
 import java.util.List;
@@ -55,6 +56,21 @@ public final class CorePlaybackControl implements PlaybackControl {
     public void releaseFrame(VideoFrame frame) {
         // The frame is given back in the same call that took it, before any track change.
         playback.player().ifPresent(player -> player.releaseFrame(frame));
+    }
+
+    @Override
+    public void setViewHeight(int pixels) {
+        playback.setViewHeight(pixels);
+    }
+
+    @Override
+    public void setVideoEnabled(boolean on) {
+        playback.setVideoEnabled(on);
+    }
+
+    @Override
+    public PlayerStats stats() {
+        return playback.player().map(Player::stats).orElse(PlayerStats.NONE);
     }
 
     @Override

@@ -692,6 +692,13 @@ ffmpeg -nostdin -hide_banner -loglevel error
   steps (360, 480, 720 or 1080 lines, bounded by the setting) that covers the
   window's on-screen size. A resize that crosses a step relaunches the session once
   the resize has been still for 500 ms.
+  Settled in M7: the view reports its height in real pixels (`Canvas.pixelScale()`, the
+  window's height over the GUI's) through `Playback.setViewHeight`, which also carries it to
+  the next track; a size known before the first session costs no relaunch. The steps and the
+  30 fps cap below 720 lines are `PlayerOptions.decodeHeight`/`fpsFor`; there is no frame rate
+  setting. A resize relaunch goes through `Buffering`, not `Seeking`, so addons see no seek.
+  Measured: four windows each taking a new frame every render cost 0.15 ms of client thread
+  at the 360-line step against 1.7 ms decoded at 720 lines (§12).
 - **Frame geometry from the stream (PAM, adopted in M1):** frames are written as
   `-f image2pipe -c:v pam`, so each carries a ~70-byte text header with its width
   and height. ffmpeg decides the output size and says what it decided, which handles
@@ -762,6 +769,9 @@ with no new session, frames until the end). Settled in M1.
 are recycled without being copied or uploaded. A setting "When hidden: keep video /
 sound only" lets weak machines relaunch without video after 5 s hidden; showing the
 window relaunches with video at the current position.
+Settled in M7: `performance.when_hidden` (`WhenHidden.KEEP_VIDEO` by default); the video
+window counts 100 ticks hidden and calls `Playback.setVideoEnabled(false)`, which the player
+applies as a relaunch with sound alone (a silent video keeps its picture whatever is asked).
 
 ### 6.6 Playback and its views
 
@@ -858,6 +868,15 @@ public interface AudioSink extends AutoCloseable {
   - **new:** anything else (WebP, animated WebP, AVIF, APNG) through
     `FfmpegImageDecoder`, which asks ffmpeg for RGBA frames. It runs only when the
     tools are available, and fails cleanly when they are not.
+    Settled in M7: the formats are sniffed (`RIFF…WEBP`, an `ftyp` box with an `avif`/`avis`
+    brand, a PNG with `acTL` before `IDAT`); other unknown bytes are refused without starting
+    a process. The bytes go to a temporary file read with `-protocol_whitelist file` (ffmpeg
+    cannot be handed a second input pipe), and frames come back as PAM, as for video. An
+    animation is decoded at a constant 50 fps and identical consecutive frames are folded back
+    into one, which recovers each frame's delay to 20 ms; a still (by its header: no VP8X
+    animation flag, no `avis` brand) is asked for as one frame, since a constant rate would
+    repeat it for as long as the stream claims. GIF's limits apply, and a process still running
+    after 20 s is killed. Addon decoders still wait on `Capability.IMAGE_DECODERS`.
 - Decoded frames are RGBA heap buffers, dropped once uploaded. The upload to textures
   happens on the client thread, 16 MB of frames per tick at most, so a large GIF never
   causes a hitch; a picture counts as ready only when every frame is up.
@@ -892,6 +911,16 @@ public final class AsyncCache<K, V> {
   `liasmediaplayer/cache/`, capped at 100 MB by default and pruned at start. A
   playlist of 200 tracks then opens with pictures and names on the second visit
   without 400 requests.
+  Settled in M7: `core.cache.DiskCache` keeps `cache/thumbnails/<sha-256>.jpg`, written to a
+  temporary file and moved, touched on read and pruned oldest-first at start, past the cap,
+  and when the cap shrinks (`performance.disk_cache_mb`, 0 to 1000, 0 keeps none). Thumbnails
+  are fetched from the site's own picture (`MediaMetadata.thumbnail`; a picture link is its
+  own), shrunk to at most 192×108 — four times the 48×27 box a row shows, for large GUI
+  scales — and decoded from the JPEG on every load, so the first and the hundredth visit look
+  the same. `cache/titles.json` (`core.library.LinkInfoStore`, a `JsonStore`) keeps each
+  link's title and thumbnail address, the 4096 most recent, so neither needs a resolution
+  again; a link with no title is kept too. "Clear the cache" in the settings footer empties
+  both. Thumbnail textures are an `AsyncCache` of 24 MB, cleared on world leave.
 - Visible-rows-only loading for long lists (v2's behaviour) is kept and made part of
   `ListView`.
 
@@ -1365,6 +1394,32 @@ Tools to measure:
 - JMH benchmarks for `LinkScanner`, `ChatRewriter`, `GifDecoder` and the ring
   buffers, in a `benchmarks` source set that is not shipped.
 
+Settled in M7 (measured on an Intel i5-12500H, Linux, Java 25, ffmpeg 9.0):
+
+| Area | Target | Measured | How measured |
+|---|---|---|---|
+| Chat message without a link | < 5 µs | 0.04 µs | `ChatBenchmark` |
+| Chat message with links | < 100 µs | 4 µs (three links) | `ChatBenchmark` |
+| Overlay per frame, 4 windows | < 0.3 ms | 0.15 ms with a new frame in every window at every render; 1 µs between frames | `WindowsBenchmark` (layout, draw calls, frame copy; the driver's upload aside) |
+| Starting a direct video | < 1 s | 58 ms to the first frame (720p, loopback, cold resolve and probe) | `StartBudget` |
+| Starting a YouTube video | < 2.5 s | not measured here: needs the network and yt-dlp | `StartBudget <link>`, or the `SessionStart` and `Resolve` events in game |
+| Seek | < 1 s | 56 ms to the first frame at the target | `StartBudget` |
+| Memory per video player at 720p | < 120 MB | 27 frames, 95 MB, plus two in flight; 2.7 s of sound in 0.5 MB | `StartBudget` |
+| Client-thread IO | none | asserted by `ProcessRunner` and `Http` | — |
+
+- The events are `liasmediaplayer.Resolve`, `SessionStart` (ffmpeg's start to its first frame
+  or sound), `FrameUpload` (in the UI's `VideoView`), `RingUnderrun` and `CacheLoad` (every
+  `AsyncCache`, which now has a name). The audio pump only counts underruns; the player's
+  actor turns the count into events, so the pump stays free of allocation.
+- The overlay (`ui.overlay.DebugOverlay`, `performance.debug_overlay`) reads
+  `PlayerStats` from each player — decoded size and rate, both rings' fill, frames dropped
+  (decoded, never shown), how late the last frame taken was behind the clock, underruns,
+  sessions — plus the upload time each `VideoView` averages and the windows' render time.
+  It rebuilds its text four times a second. The same counters are what `Capability.DIAGNOSTICS`
+  will expose.
+- The four-window figure is the one that decoding at the view's size changed: at 720 lines
+  the same benchmark takes 1.7 ms (four 3.7 MB frames no longer fit in the cache).
+
 ---
 
 ## 13. Errors, diagnostics and logging
@@ -1425,7 +1480,9 @@ platform/                            Stonecutter tree: <mc>-fabric, <mc>-neoforg
   stonecutter.properties.toml        the Minecraft × loader matrix and per-version deps
   src/main/java/…/platform/{mc,fabric,neoforge}
   src/main/resources/                fabric.mod.json, neoforge.mods.toml, mixins, lang
-benchmarks/                          JMH, not shipped
+benchmarks/                          JMH and the start/seek timer, not shipped (M7: a plain
+                                     `java` project, JMH through its annotation processor,
+                                     outside `verifyModules`)
 docs/                                user and developer docs
 ```
 
@@ -1575,7 +1632,7 @@ Each milestone ends with something that runs.
 | M4 | Library and settings: playlists, history, settings screen, themes, window state, keybinds, shortcuts, media controls screen, v2 import | Feature parity with v2 for players. Done, short of three things listed in the README. |
 | M5 | API v4, addon entry points on both loaders, an example addon in the repository, API docs and porting guide | The example addon registers a source, a theme and a window button on both loaders. Done; the parts of v2's API that need engine work wait behind `Capability` flags (§11, settled in M5). |
 | M6 | Version matrix: add 1.21.11 and the latest 26.x on both loaders (§20, decision 1) | All targets build and pass the smoke test. Done: 1.21.1, 1.21.11 and 26.3 on both loaders (§5.4, settled in M6). |
-| M7 | Performance pass with JFR and the debug overlay; disk cache; ffmpeg image fallback; polish | Budget in §12 met on a mid-range machine. |
+| M7 | Performance pass with JFR and the debug overlay; disk cache; ffmpeg image fallback; polish | Budget in §12 met on a mid-range machine. Done: every figure measured here is within budget (§12, settled in M7); YouTube start times need the network and are left to the in-game events. Polish: v2's ±10 s buttons, list thumbnails and "sound only when hidden" are back, so players are at parity with v2. |
 
 ---
 

@@ -37,6 +37,18 @@ public final class CoreSettings {
                     Settings.infoWithWarning("performance.image_cache_mb", Settings.PERFORMANCE), 256, 32, 1024)
             .withFormat(Settings.labelKey("performance.image_cache_mb") + ".value");
 
+    /** Disk space for the thumbnails of the lists; 0 keeps none. Titles are kept whatever this says. */
+    public static final IntSetting DISK_CACHE_MB = IntSetting.of(
+                    Settings.info("performance.disk_cache_mb", Settings.PERFORMANCE), 100, 0, 1000)
+            .withFormat(Settings.labelKey("performance.image_cache_mb") + ".value");
+
+    /** Whether a hidden video window keeps decoding its picture. */
+    public static final EnumSetting<WhenHidden> WHEN_HIDDEN = new EnumSetting<>(
+            Settings.info("performance.when_hidden", Settings.PERFORMANCE),
+            WhenHidden.KEEP_VIDEO,
+            choice -> Text.translatable(Settings.labelKey("performance.when_hidden") + "."
+                    + choice.name().toLowerCase(Locale.ROOT)));
+
     /** Replace a yt-dlp more than 30 days old at startup, rather than only saying so. */
     public static final BoolSetting AUTO_UPDATE_TOOLS =
             new BoolSetting(Settings.info("tools.auto_update", Settings.TOOLS), true);
@@ -51,6 +63,8 @@ public final class CoreSettings {
                 ALLOWED_HOSTS,
                 BLOCKED_SENDERS,
                 IMAGE_CACHE_MB,
+                DISK_CACHE_MB,
+                WHEN_HIDDEN,
                 AUTO_UPDATE_TOOLS);
     }
 

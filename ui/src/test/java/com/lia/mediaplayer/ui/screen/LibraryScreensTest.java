@@ -21,6 +21,7 @@ import com.lia.mediaplayer.ui.widget.Widget;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -147,16 +148,16 @@ class LibraryScreensTest {
 
         // Drag the first entry below the third.
         var entries = screen.entries();
-        Rect first = row(entries, 0, PlaylistScreen.ROW);
+        Rect first = row(entries, 0, PlaylistScreen.ENTRY_ROW);
         screen.input(new InputEvent.PointerDown(first.centerX(), first.centerY(), 0, Mods.NONE, 1));
         render(screen);
-        screen.render(canvas.clear(), first.centerX(), entries.bounds().y() + 3 * PlaylistScreen.ROW, Mods.NONE);
-        screen.input(
-                new InputEvent.PointerUp(first.centerX(), entries.bounds().y() + 3 * PlaylistScreen.ROW, 0, Mods.NONE));
+        screen.render(canvas.clear(), first.centerX(), entries.bounds().y() + 3 * PlaylistScreen.ENTRY_ROW, Mods.NONE);
+        screen.input(new InputEvent.PointerUp(
+                first.centerX(), entries.bounds().y() + 3 * PlaylistScreen.ENTRY_ROW, 0, Mods.NONE));
         render(screen);
         assertThat(library.playlist(road.id()).orElseThrow().urls()).containsExactly(B, C, A);
 
-        click(screen, row(entries, 1, PlaylistScreen.ROW), 2);
+        click(screen, row(entries, 1, PlaylistScreen.ENTRY_ROW), 2);
         assertThat(calls).containsExactly("play " + C);
         screen.setLoop(true);
         render(screen);
@@ -176,7 +177,7 @@ class LibraryScreensTest {
                 .extracting(PlaylistScreen.Entry::url)
                 .containsExactly(B);
         assertThat(canvas.strings()).contains("gui.liasmediaplayer.playlists.entries.filtered[1,3]");
-        Rect first = row(screen.entries(), 0, PlaylistScreen.ROW);
+        Rect first = row(screen.entries(), 0, PlaylistScreen.ENTRY_ROW);
         screen.input(new InputEvent.PointerDown(first.centerX(), first.centerY(), 0, Mods.NONE, 1));
         assertThat(screen.entries().isDragging()).isFalse();
         screen.input(new InputEvent.PointerUp(first.centerX(), first.centerY(), 0, Mods.NONE));
@@ -222,8 +223,9 @@ class LibraryScreensTest {
         Playlist p = library.create("p", List.of(A, B));
         var screen = playlists(p.id());
         Rect list = screen.entries().bounds();
-        // The remove button is the last thing on the row.
-        screen.input(new InputEvent.PointerDown(list.right() - 8, list.y() + 6, 0, Mods.NONE, 1));
+        // The remove button is the last thing on the row, centred on its height.
+        screen.input(
+                new InputEvent.PointerDown(list.right() - 8, list.y() + PlaylistScreen.ENTRY_ROW / 2, 0, Mods.NONE, 1));
         render(screen);
         assertThat(library.playlist(p.id()).orElseThrow().urls()).containsExactly(B);
     }
@@ -232,7 +234,14 @@ class LibraryScreensTest {
 
     private HistoryScreen history(@Nullable String target) {
         var screen = new HistoryScreen(
-                () -> Themes.DARK, () -> 0L, library, core.titles(), platform.clipboard(), actions, target);
+                () -> Themes.DARK,
+                () -> 0L,
+                library,
+                core.titles(),
+                url -> Optional.empty(),
+                platform.clipboard(),
+                actions,
+                target);
         render(screen);
         return screen;
     }
@@ -271,7 +280,7 @@ class LibraryScreensTest {
         var screen = history(target.id());
         assertThat(screen.target()).contains(target);
         Rect list = screen.list().bounds();
-        int y = list.y() + 6;
+        int y = list.y() + HistoryScreen.ROW / 2;
         // From the right: remove, add, heart, play — each a 13-pixel button with a 3-pixel gap.
         int remove = list.right() - 3 - 7;
         int add = remove - 16;

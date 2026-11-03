@@ -9,13 +9,18 @@ import com.lia.mediaplayer.core.addon.LibraryReader;
 import com.lia.mediaplayer.core.addon.MediaEvents;
 import com.lia.mediaplayer.core.addon.PlaybackHandles;
 import com.lia.mediaplayer.core.addon.SettingValuesView;
+import com.lia.mediaplayer.core.cache.DiskCache;
 import com.lia.mediaplayer.core.event.EventBus;
 import com.lia.mediaplayer.core.ffmpeg.ProbeCache;
+import com.lia.mediaplayer.core.image.FfmpegImageDecoder;
 import com.lia.mediaplayer.core.image.ImageCache;
 import com.lia.mediaplayer.core.image.ImageLoader;
 import com.lia.mediaplayer.core.library.Library;
 import com.lia.mediaplayer.core.library.LibraryCodec;
 import com.lia.mediaplayer.core.library.LibraryData;
+import com.lia.mediaplayer.core.library.LinkInfo;
+import com.lia.mediaplayer.core.library.LinkInfoStore;
+import com.lia.mediaplayer.core.library.Thumbnails;
 import com.lia.mediaplayer.core.library.Titles;
 import com.lia.mediaplayer.core.lifecycle.ClientThread;
 import com.lia.mediaplayer.core.lifecycle.CoreExecutors;
@@ -54,6 +59,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.SplittableRandom;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -78,6 +85,8 @@ public final class MediaPlayerCore implements AutoCloseable {
     /** How long a store waits for changes to stop before it writes. */
     private static final Duration WRITE_DEBOUNCE = Duration.ofMillis(500);
 
+    private static final long MEGABYTE = 1024L * 1024;
+
     private final Platform platform;
     private final DataPaths paths;
     private final Disposer disposer = new Disposer();
@@ -93,7 +102,11 @@ public final class MediaPlayerCore implements AutoCloseable {
     private final PlaybackEngine engine;
     private final PlaybackRegistry playbacks;
     private final ImageCache images;
+    private final DiskCache diskCache;
+    private final LinkInfoStore links;
     private final Titles titles;
+    private final Thumbnails thumbnails;
+    private final Executor io;
     private final AddonGuard addonGuard = new AddonGuard();
     private final Interceptors interceptors = new Interceptors();
     private final PlaybackHandles handles;
@@ -118,6 +131,7 @@ public final class MediaPlayerCore implements AutoCloseable {
         ClientThread clientThread = platform.clientThread();
         InstantSource clock = InstantSource.system();
         var executors = disposer.add(new CoreExecutors());
+        this.io = executors.io();
         this.events = new EventBus(clientThread);
         var processes = disposer.add(new ProcessRunner(clientThread));
         var http = disposer.add(new Http(clientThread));
@@ -198,14 +212,41 @@ public final class MediaPlayerCore implements AutoCloseable {
         playbacks.onTrackStarted(
                 (playback, ref) -> library.recordPlay(ref.url(), playback.audioOnly() ? MediaKind.AUDIO : ref.kind()));
 
+        var pictures = new FfmpegImageDecoder(tools, processes);
         this.images = disposer.add(new ImageCache(
-                new ImageLoader(resolver, http, executors.io(), executors.decode()),
+                new ImageLoader(resolver, http, executors.io(), executors.decode(), pictures),
                 platform.textures(),
                 clientThread,
                 ImageCache.DEFAULT_MAX_BYTES));
         var unusedCacheSize =
-                settings.apply(CoreSettings.IMAGE_CACHE_MB, megabytes -> images.setMaxBytes(megabytes * 1024L * 1024L));
-        this.titles = new Titles(sources, resolver, clientThread);
+                settings.apply(CoreSettings.IMAGE_CACHE_MB, megabytes -> images.setMaxBytes(megabytes * MEGABYTE));
+
+        // The disk cache is pruned at start, off the client thread, and again when its cap shrinks.
+        this.diskCache = new DiskCache(paths.thumbnails(), ".jpg", 0);
+        var unusedDiskSize = settings.apply(CoreSettings.DISK_CACHE_MB, megabytes -> {
+            diskCache.setMaxBytes(megabytes * MEGABYTE);
+            io.execute(diskCache::prune);
+        });
+        var linkFile = disposer.add(new JsonStore<Map<String, LinkInfo>>(
+                paths.titles(),
+                LinkInfoStore.codec(),
+                1,
+                List.of(),
+                executors.io(),
+                executors.timer(),
+                WRITE_DEBOUNCE));
+        io.execute(linkFile::get);
+        this.links = new LinkInfoStore(linkFile, sources, resolver, executors.io());
+        this.titles = new Titles(links, clientThread);
+        this.thumbnails = disposer.add(new Thumbnails(
+                links,
+                diskCache,
+                http,
+                pictures,
+                executors.io(),
+                executors.decode(),
+                platform.textures(),
+                clientThread));
 
         this.handles = new PlaybackHandles(playbacks, sources, clientThread);
         this.mediaEvents = MediaEvents.following(playbacks, handles, events);
@@ -247,6 +288,31 @@ public final class MediaPlayerCore implements AutoCloseable {
     /** The titles of links, for lists. */
     public Titles titles() {
         return titles;
+    }
+
+    /** The thumbnails of links, for lists. */
+    public Thumbnails thumbnails() {
+        return thumbnails;
+    }
+
+    /** Thumbnails on disk, as of the last write or prune. */
+    public long diskCacheBytes() {
+        return diskCache.bytes();
+    }
+
+    /**
+     * Empties {@code cache/}: the thumbnails, the titles and where their pictures are. What is
+     * on screen is fetched again as it is next drawn. Completes on the client thread.
+     */
+    public CompletableFuture<Void> clearCache() {
+        platform.clientThread().checkCurrent();
+        thumbnails.clear();
+        return CompletableFuture.runAsync(
+                () -> {
+                    diskCache.clear();
+                    links.clear();
+                },
+                io);
     }
 
     /** How a new player plays, from the settings: sound only, or with a picture no taller than chosen. */
@@ -325,6 +391,7 @@ public final class MediaPlayerCore implements AutoCloseable {
         LOGGER.debug("World left");
         playbacks.closeAll();
         images.clear();
+        thumbnails.clear();
     }
 
     /** Releases everything; called once when the game shuts down. */

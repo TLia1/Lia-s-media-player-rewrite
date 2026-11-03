@@ -27,6 +27,7 @@ import com.lia.mediaplayer.ui.input.Mods;
 import com.lia.mediaplayer.ui.input.PointerTracker;
 import com.lia.mediaplayer.ui.overlay.ChatChips;
 import com.lia.mediaplayer.ui.overlay.ChatOverlay;
+import com.lia.mediaplayer.ui.overlay.DebugOverlay;
 import com.lia.mediaplayer.ui.overlay.NowPlayingBanner;
 import com.lia.mediaplayer.ui.screen.HistoryScreen;
 import com.lia.mediaplayer.ui.screen.LibraryActions;
@@ -89,6 +90,7 @@ public final class MediaPlayerUi implements ClientEvents {
     private final ChatOverlay chat;
     private final ChatChips chips;
     private final NowPlayingBanner banner = new NowPlayingBanner();
+    private final DebugOverlay debug;
     private final IdentityHashMap<Window, String> announced = new IdentityHashMap<>();
     private final LibraryActions libraryActions = new Actions();
     private Theme theme = Themes.DARK;
@@ -119,6 +121,7 @@ public final class MediaPlayerUi implements ClientEvents {
                 core.sources(),
                 core.images(),
                 (ref, audioOnly, newWindow) -> play(ref, audioOnly, newWindow, PlayOrigin.CHAT_CLICK));
+        this.debug = new DebugOverlay(() -> core.images().bytes(), core::diskCacheBytes);
         this.chips = new ChatChips(
                 () -> host.openScreenOver(playlistScreen(null)), windows::toggleHidden, windows::hiddenCount);
         var unusedTheme = core.settings().apply(themeSetting, id -> theme = themes.byId(id));
@@ -324,6 +327,10 @@ public final class MediaPlayerUi implements ClientEvents {
                 () -> {
                     var unused = core.tools().update();
                 },
+                core::diskCacheBytes,
+                () -> {
+                    var unused = core.clearCache();
+                },
                 host::closeScreen);
     }
 
@@ -350,6 +357,7 @@ public final class MediaPlayerUi implements ClientEvents {
                     nanoTime,
                     core.library(),
                     core.titles(),
+                    core.thumbnails()::get,
                     core.platform().clipboard(),
                     this,
                     playlistId));
@@ -433,7 +441,9 @@ public final class MediaPlayerUi implements ClientEvents {
             windows.input(moved);
         }
         var ctx = new RenderContext(theme, nanoTime.getAsLong(), mouseX, mouseY, true);
+        long started = System.nanoTime();
         windows.render(canvas, ctx);
+        debug.recordWindows(System.nanoTime() - started);
         if (screen.kind() == ScreenContext.Kind.CHAT) {
             boolean overWindow = windows.covers(mouseX, mouseY);
             canvas.nextLayer();
@@ -443,6 +453,18 @@ public final class MediaPlayerUi implements ClientEvents {
             }
         }
         banner.render(canvas, ctx);
+        renderDebug(canvas, ctx);
+    }
+
+    private void renderDebug(Canvas canvas, RenderContext ctx) {
+        if (core.settings().get(UiSettings.DEBUG_OVERLAY)) {
+            debug.render(canvas, ctx.withoutPointer(), windows.windows());
+        }
+    }
+
+    /** The debug overlay, for tests. */
+    DebugOverlay debugOverlay() {
+        return debug;
     }
 
     @Override
@@ -452,8 +474,11 @@ public final class MediaPlayerUi implements ClientEvents {
             return;
         }
         var ctx = new RenderContext(theme, nanoTime.getAsLong(), Double.NaN, Double.NaN, false);
+        long started = System.nanoTime();
         windows.renderHud(canvas, ctx);
+        debug.recordWindows(System.nanoTime() - started);
         banner.render(canvas, ctx);
+        renderDebug(canvas, ctx);
     }
 
     @Override

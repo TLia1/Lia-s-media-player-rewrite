@@ -5,6 +5,7 @@ import com.lia.mediaplayer.api.source.ResolveOptions;
 import com.lia.mediaplayer.api.source.ResolvedMedia;
 import com.lia.mediaplayer.api.source.Resolver;
 import com.lia.mediaplayer.core.addon.AddonGuard;
+import com.lia.mediaplayer.core.diag.jfr.ResolveEvent;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -49,6 +50,7 @@ public final class ResolverChain {
         var key = new ResolveCache.Key(ref.url(), options);
         Optional<ResolvedMedia> cached = cache.get(key);
         if (cached.isPresent()) {
+            ResolveEvent.start(ref.url()).finish(true, true);
             return CompletableFuture.completedFuture(cached.get());
         }
         var created = new CompletableFuture<ResolvedMedia>();
@@ -56,7 +58,9 @@ public final class ResolverChain {
         if (shared != null) {
             return shared.copy();
         }
+        var event = ResolveEvent.start(ref.url());
         var unused = start(ref, options).whenComplete((media, error) -> {
+            event.finish(false, error == null);
             inFlight.remove(key, created);
             if (error != null) {
                 created.completeExceptionally(error);
